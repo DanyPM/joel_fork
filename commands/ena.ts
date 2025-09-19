@@ -5,7 +5,6 @@ import {
   List_Promos_INSP_ENA,
   Promo_ENA_INSP
 } from "../entities/PromoNames.ts";
-import TelegramBot from "node-telegram-bot-api";
 import { JORFSearchItem } from "../entities/JORFSearchResponse.ts";
 import {
   callJORFSearchOrganisation,
@@ -69,6 +68,8 @@ async function getJORFPromoSearchResult(
   }
 }
 
+
+
 export const enaCommand = async (session: ISession): Promise<void> => {
   try {
     await session.log({ event: "/ena" });
@@ -80,147 +81,130 @@ export const enaCommand = async (session: ISession): Promise<void> => {
     if (tgSession == null) return;
     const tgBot = tgSession.telegramBot;
 
-    const text = `Entrez le nom de votre promo (ENA ou INSP) et l'*intégralité de ses élèves* sera ajoutée à la liste de vos contacts.\n
-⚠️ Attention, un nombre important de suivis seront ajoutés en même temps, *les retirer peut ensuite prendre du temps* ⚠️\n
+    const text = `Entrez le nom de votre promo (ENA ou INSP) et l'*intégralité de ses élèves* sera ajoutée à la liste de vos contacts.
+⚠️ Attention, un nombre important de suivis seront ajoutés en même temps, *les retirer peut ensuite prendre du temps* ⚠️
 Formats acceptés:
 Georges-Clemenceau
-2017-2018\n
+2017-2018
 Utilisez la command /promos pour consulter la liste des promotions INSP et ENA disponibles.`;
-    const question = await tgBot.sendMessage(session.chatId, text, {
+    const question = await tgBot.telegram.sendMessage(session.chatId, text, {
       parse_mode: "Markdown",
       reply_markup: {
         force_reply: true
       }
     });
-    tgBot.onReplyToMessage(
+    const tgMsg1 = await tgSession.waitForReply(question.message_id);
+    const replyText1 = "text" in tgMsg1 ? tgMsg1.text : undefined;
+
+    if (replyText1 == undefined || replyText1.length == 0) {
+      await session.sendMessage(
+        `Votre réponse n'a pas été reconnue.👎\nVeuillez essayer de nouveau la commande.`,
+        [
+          [KEYBOARD_KEYS.ENA_INSP_PROMO_SEARCH.key],
+          [KEYBOARD_KEYS.MAIN_MENU.key]
+        ]
+      );
+      return;
+    }
+
+    if (RegExp(/\/promos/i).test(replyText1)) {
+      await promosCommand(session);
+      return;
+    }
+
+    const promoInfo = findENAINSPPromo(replyText1);
+
+    const temp_keyboard: Keyboard = [
+      [KEYBOARD_KEYS.ENA_INSP_PROMO_SEARCH.key],
+      [KEYBOARD_KEYS.ENA_INSP_PROMO_LIST.key],
+      [KEYBOARD_KEYS.MAIN_MENU.key]
+    ];
+
+    if (promoInfo && !promoInfo.onJORF) {
+      const promoStr = promoInfo.name
+        ? `${promoInfo.name} (${promoInfo.period})`
+        : promoInfo.period;
+
+      await session.sendMessage(
+        `La promotion *${promoStr}* n'est pas disponible dans les archives du JO car elle est trop ancienne.\nUtilisez la commande /promos pour consulter la liste des promotions INSP et ENA disponibles.`,
+        temp_keyboard
+      );
+      return;
+    }
+
+    let promoJORFList: JORFSearchItem[] = [];
+    if (promoInfo !== null)
+      promoJORFList = await getJORFPromoSearchResult(promoInfo);
+
+    if (promoInfo == null || promoJORFList.length == 0) {
+      await session.sendMessage(
+        `La promotion n'a pas été reconnue.👎\nVeuillez essayer de nouveau la commande.\n\nUtilisez la commande /promos pour consulter la liste des promotions INSP et ENA disponibles.`,
+        temp_keyboard
+      );
+      return;
+    }
+
+    const promoStr = promoInfo.name
+      ? `${promoInfo.name} (${promoInfo.period})`
+      : promoInfo.period;
+
+    await session.sendMessage(
+      `La promotion *${promoStr}* contient *${String(promoJORFList.length)} élèves*:`
+    );
+
+    promoJORFList.sort((a, b) => {
+      if (a.nom.toUpperCase() < b.nom.toUpperCase()) return -1;
+      if (a.nom.toUpperCase() > b.nom.toUpperCase()) return 1;
+      return 0;
+    });
+    const contacts = promoJORFList.map((contact) => {
+      return `${contact.nom} ${contact.prenom}`;
+    });
+    await session.sendMessage(contacts.join("\n"));
+
+    const followConfirmation = await tgBot.telegram.sendMessage(
       session.chatId,
-      question.message_id,
-      (tgMsg1: TelegramBot.Message) => {
-        void (async () => {
-          if (tgMsg1.text == undefined || tgMsg1.text.length == 0) {
-            await session.sendMessage(
-              `Votre réponse n'a pas été reconnue.👎\nVeuillez essayer de nouveau la commande.`,
-              [
-                [KEYBOARD_KEYS.ENA_INSP_PROMO_SEARCH.key],
-                [KEYBOARD_KEYS.MAIN_MENU.key]
-              ]
-            );
-            return;
-          }
-
-          // If the user used the /promos command or button
-          if (RegExp(/\/promos/i).test(tgMsg1.text)) {
-            await promosCommand(session);
-            return;
-          }
-
-          const promoInfo = findENAINSPPromo(tgMsg1.text);
-
-          const temp_keyboard: Keyboard = [
-            [KEYBOARD_KEYS.ENA_INSP_PROMO_SEARCH.key],
-            [KEYBOARD_KEYS.ENA_INSP_PROMO_LIST.key],
-            [KEYBOARD_KEYS.MAIN_MENU.key]
-          ];
-
-          if (promoInfo && !promoInfo.onJORF) {
-            const promoStr = promoInfo.name
-              ? `${promoInfo.name} (${promoInfo.period})`
-              : promoInfo.period;
-
-            await session.sendMessage(
-              `La promotion *${promoStr}* n'est pas disponible dans les archives du JO car elle est trop ancienne.\n
-Utilisez la commande /promos pour consulter la liste des promotions INSP et ENA disponibles.`,
-              temp_keyboard
-            );
-            return;
-          }
-
-          let promoJORFList: JORFSearchItem[] = [];
-          if (promoInfo !== null)
-            promoJORFList = await getJORFPromoSearchResult(promoInfo);
-
-          if (promoInfo == null || promoJORFList.length == 0) {
-            await session.sendMessage(
-              `La promotion n'a pas été reconnue.👎\nVeuillez essayer de nouveau la commande.\n\n
-Utilisez la commande /promos pour consulter la liste des promotions INSP et ENA disponibles.`,
-              temp_keyboard
-            );
-            return;
-          }
-
-          const promoStr = promoInfo.name
-            ? `${promoInfo.name} (${promoInfo.period})`
-            : promoInfo.period;
-
-          await session.sendMessage(
-            `La promotion *${promoStr}* contient *${String(promoJORFList.length)} élèves*:`
-          );
-
-          // sort JORFSearchRes by the upper lastname: to account for French "particule"
-          promoJORFList.sort((a, b) => {
-            if (a.nom.toUpperCase() < b.nom.toUpperCase()) return -1;
-            if (a.nom.toUpperCase() > b.nom.toUpperCase()) return 1;
-            return 0;
-          });
-          // send all contacts
-          const contacts = promoJORFList.map((contact) => {
-            return `${contact.nom} ${contact.prenom}`;
-          });
-          await session.sendMessage(contacts.join("\n"));
-          const followConfirmation = await tgBot.sendMessage(
-            session.chatId,
-            `Voulez-vous ajouter ces personnes à vos suivis ? (répondez *oui* ou *non*)\n\n⚠️ Attention : *les retirer peut ensuite prendre du temps*`,
-            {
-              parse_mode: "Markdown",
-              reply_markup: {
-                force_reply: true
-              }
-            }
-          );
-          tgBot.onReplyToMessage(
-            session.chatId,
-            followConfirmation.message_id,
-            (tgMsg2: TelegramBot.Message) => {
-              void (async () => {
-                if (tgMsg2.text != undefined) {
-                  if (new RegExp(/oui/i).test(tgMsg2.text)) {
-                    await session.sendMessage(`Ajout en cours... ⏰`);
-                    await session.sendTypingAction();
-                    session.user ??= await User.findOrCreate(session);
-
-                    const peopleTab: IPeople[] = [];
-
-                    for (const contact of promoJORFList) {
-                      const people = await People.findOrCreate({
-                        nom: contact.nom,
-                        prenom: contact.prenom
-                      });
-                      peopleTab.push(people);
-                    }
-                    await session.user.addFollowedPeopleBulk(peopleTab);
-                    await session.user.save();
-                    await session.sendMessage(
-                      `Les *${String(
-                        peopleTab.length
-                      )} personnes* de la promo *${promoStr}* ont été ajoutées à vos contacts.`
-                    );
-                    return;
-                  } else if (new RegExp(/non/i).test(tgMsg2.text)) {
-                    await session.sendMessage(
-                      `Ok, aucun ajout n'a été effectué. 👌`
-                    );
-                    return;
-                  }
-                }
-                await session.sendMessage(
-                  `Votre réponse n'a pas été reconnue. 👎\nVeuillez essayer de nouveau la commande.`,
-                  temp_keyboard
-                );
-              })();
-            }
-          );
-        })();
+      `Voulez-vous ajouter ces personnes à vos suivis ? (répondez *oui* ou *non*)\n\n⚠️ Attention : *les retirer peut ensuite prendre du temps*`,
+      {
+        parse_mode: "Markdown",
+        reply_markup: {
+          force_reply: true
+        }
       }
+    );
+    const tgMsg2 = await tgSession.waitForReply(followConfirmation.message_id);
+    const replyText2 = "text" in tgMsg2 ? tgMsg2.text : undefined;
+
+    if (replyText2 != undefined) {
+      if (new RegExp(/oui/i).test(replyText2)) {
+        await session.sendMessage(`Ajout en cours... ⏰`);
+        await session.sendTypingAction();
+        session.user ??= await User.findOrCreate(session);
+
+        const peopleTab: IPeople[] = [];
+
+        for (const contact of promoJORFList) {
+          const people = await People.findOrCreate({
+            nom: contact.nom,
+            prenom: contact.prenom
+          });
+          peopleTab.push(people);
+        }
+        await session.user.addFollowedPeopleBulk(peopleTab);
+        await session.user.save();
+        await session.sendMessage(
+          `Les *${String(peopleTab.length)} personnes* de la promo *${promoStr}* ont été ajoutées à vos contacts.`
+        );
+        return;
+      } else if (new RegExp(/non/i).test(replyText2)) {
+        await session.sendMessage(`Ok, aucun ajout n'a été effectué. 👌`);
+        return;
+      }
+    }
+
+    await session.sendMessage(
+      `Votre réponse n'a pas été reconnue. 👎\nVeuillez essayer de nouveau la commande.`,
+      temp_keyboard
     );
   } catch (error) {
     console.log(error);
@@ -260,6 +244,7 @@ export const promosCommand = async (session: ISession): Promise<void> => {
   }
 };
 
+
 export const suivreFromJOReference = async (
   session: ISession
 ): Promise<void> => {
@@ -273,114 +258,102 @@ export const suivreFromJOReference = async (
     if (tgSession == null) return;
     const tgBot = tgSession.telegramBot;
 
-    const text = `Entrez la référence JORF/BO et l'*intégralité des personnes mentionnées* sera ajoutée à la liste de vos contacts.\n
-⚠️ Attention, un nombre important de suivis seront ajoutés en même temps, *les retirer peut ensuite prendre du temps* ⚠️\n
+    const text = `Entrez la référence JORF/BO et l'*intégralité des personnes mentionnées* sera ajoutée à la liste de vos contacts.
+⚠️ Attention, un nombre important de suivis seront ajoutés en même temps, *les retirer peut ensuite prendre du temps* ⚠️
 Format: *JORFTEXT000052060473*`;
-    const question = await tgBot.sendMessage(session.chatId, text, {
+    const question = await tgBot.telegram.sendMessage(session.chatId, text, {
       parse_mode: "Markdown",
       reply_markup: {
         force_reply: true
       }
     });
-    tgBot.onReplyToMessage(
+    const tgMsg1 = await tgSession.waitForReply(question.message_id);
+    const replyText1 = "text" in tgMsg1 ? tgMsg1.text : undefined;
+
+    const temp_keyboard: Keyboard = [
+      [KEYBOARD_KEYS.REFERENCE_FOLLOW.key],
+      [KEYBOARD_KEYS.MAIN_MENU.key]
+    ];
+    if (replyText1 == undefined || replyText1.length == 0) {
+      await session.sendMessage(
+        `Votre réponse n'a pas été reconnue.👎
+Veuillez essayer de nouveau la commande.`,
+        temp_keyboard
+      );
+      return;
+    }
+
+    const ref = replyText1.trim().toUpperCase();
+
+    const JORFResult = await callJORFSearchReference(ref);
+
+    if (JORFResult.length == 0) {
+      const message = `La référence n'a pas été pas été reconnue.👎
+Veuillez essayer de nouveau la commande.`;
+
+      await session.sendMessage(message, [temp_keyboard]);
+      return;
+    }
+
+    await session.sendMessage(
+      `Le texte *${ref}* mentionne *${String(JORFResult.length)} personnes*:`
+    );
+
+    JORFResult.sort((a, b) => {
+      if (a.nom.toUpperCase() < b.nom.toUpperCase()) return -1;
+      if (a.nom.toUpperCase() > b.nom.toUpperCase()) return 1;
+      return 0;
+    });
+    const contacts = JORFResult.map((contact) => {
+      return `${contact.nom} ${contact.prenom}`;
+    });
+    await session.sendMessage(contacts.join("\n"));
+    const followConfirmation = await tgBot.telegram.sendMessage(
       session.chatId,
-      question.message_id,
-      (tgMsg1: TelegramBot.Message) => {
-        void (async () => {
-          const temp_keyboard: Keyboard = [
-            [KEYBOARD_KEYS.REFERENCE_FOLLOW.key],
-            [KEYBOARD_KEYS.MAIN_MENU.key]
-          ];
-          if (tgMsg1.text == undefined || tgMsg1.text.length == 0) {
-            await session.sendMessage(
-              `Votre réponse n'a pas été reconnue.👎\nVeuillez essayer de nouveau la commande.`,
-              temp_keyboard
-            );
-            return;
-          }
-
-          const ref = tgMsg1.text.trim().toUpperCase();
-
-          const JORFResult = await callJORFSearchReference(ref);
-
-          if (JORFResult.length == 0) {
-            const message = `La référence n'a pas été pas été reconnue.👎\nVeuillez essayer de nouveau la commande.`;
-
-            await session.sendMessage(message, [temp_keyboard]);
-            return;
-          }
-
-          await session.sendMessage(
-            `Le texte *${ref}* mentionne *${String(JORFResult.length)} personnes*:`
-          );
-
-          // sort JORFSearchRes by the upper lastname: to account for French "particule"
-          JORFResult.sort((a, b) => {
-            if (a.nom.toUpperCase() < b.nom.toUpperCase()) return -1;
-            if (a.nom.toUpperCase() > b.nom.toUpperCase()) return 1;
-            return 0;
-          });
-          // send all contacts
-          const contacts = JORFResult.map((contact) => {
-            return `${contact.nom} ${contact.prenom}`;
-          });
-          await session.sendMessage(contacts.join("\n"));
-          const followConfirmation = await tgBot.sendMessage(
-            session.chatId,
-            `Voulez-vous ajouter ces personnes à vos suivis ? (répondez *oui* ou *non*)\n\n⚠️ Attention : *les retirer peut ensuite prendre du temps*`,
-            {
-              parse_mode: "Markdown",
-              reply_markup: {
-                force_reply: true
-              }
-            }
-          );
-          tgBot.onReplyToMessage(
-            session.chatId,
-            followConfirmation.message_id,
-            (tgMsg2: TelegramBot.Message) => {
-              void (async () => {
-                if (tgMsg2.text != undefined) {
-                  if (new RegExp(/oui/i).test(tgMsg2.text)) {
-                    await session.sendMessage(`Ajout en cours... ⏰`);
-                    await session.sendTypingAction();
-                    session.user ??= await User.findOrCreate(session);
-
-                    const peopleTab: IPeople[] = [];
-
-                    for (const contact of JORFResult) {
-                      const people = await People.findOrCreate({
-                        nom: contact.nom,
-                        prenom: contact.prenom
-                      });
-                      peopleTab.push(people);
-                    }
-                    await session.user.addFollowedPeopleBulk(peopleTab);
-                    await session.user.save();
-                    await session.sendMessage(
-                      `Les *${String(
-                        peopleTab.length
-                      )} personnes* ont été ajoutées à vos contacts.`
-                    );
-                    return;
-                  } else if (new RegExp(/non/i).test(tgMsg2.text)) {
-                    await session.sendMessage(
-                      `Ok, aucun ajout n'a été effectué. 👌`
-                    );
-                    return;
-                  }
-                }
-                await session.sendMessage(
-                  `Votre réponse n'a pas été reconnue. 👎\nVeuillez essayer de nouveau la commande.`,
-                  temp_keyboard
-                );
-              })();
-            }
-          );
-        })();
+      `Voulez-vous ajouter ces personnes à vos suivis ? (répondez *oui* ou *non*)\n\n⚠️ Attention : *les retirer peut ensuite prendre du temps*`,
+      {
+        parse_mode: "Markdown",
+        reply_markup: {
+          force_reply: true
+        }
       }
+    );
+    const tgMsg2 = await tgSession.waitForReply(followConfirmation.message_id);
+    const replyText2 = "text" in tgMsg2 ? tgMsg2.text : undefined;
+
+    if (replyText2 != undefined) {
+      if (new RegExp(/oui/i).test(replyText2)) {
+        await session.sendMessage(`Ajout en cours... ⏰`);
+        await session.sendTypingAction();
+        session.user ??= await User.findOrCreate(session);
+
+        const peopleTab: IPeople[] = [];
+
+        for (const contact of JORFResult) {
+          const people = await People.findOrCreate({
+            nom: contact.nom,
+            prenom: contact.prenom
+          });
+          peopleTab.push(people);
+        }
+        await session.user.addFollowedPeopleBulk(peopleTab);
+        await session.user.save();
+        await session.sendMessage(
+          `Les *${String(peopleTab.length)} personnes* ont été ajoutées à vos contacts.`
+        );
+        return;
+      } else if (new RegExp(/non/i).test(replyText2)) {
+        await session.sendMessage(`Ok, aucun ajout n'a été effectué. 👌`);
+        return;
+      }
+    }
+    await session.sendMessage(
+      `Votre réponse n'a pas été reconnue. 👎
+Veuillez essayer de nouveau la commande.`,
+      temp_keyboard
     );
   } catch (error) {
     console.log(error);
   }
 };
+

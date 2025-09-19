@@ -9,7 +9,6 @@ import {
   extractTelegramSession,
   TelegramSession
 } from "../entities/TelegramSession.ts";
-import TelegramBot from "node-telegram-bot-api";
 import { parseIntAnswers } from "../utils/text.utils.ts";
 import { Types } from "mongoose";
 import User from "../models/User.ts";
@@ -223,10 +222,9 @@ export const unfollowTelegram = async (session: ISession) => {
 
     const tgBot = tgSession.telegramBot;
 
-    const question = await tgBot.sendMessage(
+    const question = await tgBot.telegram.sendMessage(
       session.chatId,
-      `Entrez le(s) nombre(s) correspondant au(x) contact(s) à supprimer.\nExemple: 1 4 7\n
-Si nécessaire, vous pouvez utiliser la commande /list pour revoir vos suivis`,
+      `Entrez le(s) nombre(s) correspondant au(x) contact(s) à supprimer.\nExemple: 1 4 7\nSi nécessaire, vous pouvez utiliser la commande /list pour revoir vos suivis`,
       {
         reply_markup: {
           force_reply: true
@@ -234,25 +232,20 @@ Si nécessaire, vous pouvez utiliser la commande /list pour revoir vos suivis`,
       }
     );
 
-    tgBot.onReplyToMessage(
-      session.chatId,
-      question.message_id,
-      (tgMsg: TelegramBot.Message) => {
-        void (async () => {
-          if (session.user == undefined) return;
+    const tgMsg = await tgSession.waitForReply(question.message_id);
+    const replyText = "text" in tgMsg ? tgMsg.text : undefined;
 
-          if (tgMsg.text == "/list") {
-            await listCommand(session);
-            return;
-          }
+    if (session.user == undefined) return;
 
-          await unfollowFromStr(
-            session,
-            "Retirer " + (tgMsg.text ?? ""),
-            false
-          );
-        })();
-      }
+    if (replyText === "/list") {
+      await listCommand(session);
+      return;
+    }
+
+    await unfollowFromStr(
+      session,
+      "Retirer " + (replyText ?? ""),
+      false
     );
   } catch (error) {
     console.log(error);

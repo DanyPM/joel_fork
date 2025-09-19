@@ -4,7 +4,6 @@ import {
   extractTelegramSession,
   TelegramSession
 } from "../entities/TelegramSession.ts";
-import TelegramBot from "node-telegram-bot-api";
 
 export const deleteProfileCommand = async (
   session: ISession
@@ -26,11 +25,9 @@ export const deleteProfileCommand = async (
 
     const tgBot = tgSession.telegramBot;
 
-    const question = await tgBot.sendMessage(
+    const question = await tgBot.telegram.sendMessage(
       session.chatId,
-      `*Vous êtes sur le point de supprimer votre profil JOÉL*, comprenant l'ensemble de vos contacts, fonctions et organisations suivis.\n
-⚠️ *Attention, ces données ne sont pas récupérables par la suite* ⚠️
-Pour confirmer vous devez répondre "SUPPRIMER MON COMPTE" en majuscule à ce message`,
+      `*Vous êtes sur le point de supprimer votre profil JOÉL*, comprenant l'ensemble de vos contacts, fonctions et organisations suivis.\n⚠️ *Attention, ces données ne sont pas récupérables par la suite* ⚠️\nPour confirmer vous devez répondre "SUPPRIMER MON COMPTE" en majuscule à ce message`,
       {
         parse_mode: "Markdown",
         reply_markup: {
@@ -38,26 +35,21 @@ Pour confirmer vous devez répondre "SUPPRIMER MON COMPTE" en majuscule à ce me
         }
       }
     );
-    tgBot.onReplyToMessage(
-      session.chatId,
-      question.message_id,
-      (tgMsg: TelegramBot.Message) => {
-        void (async () => {
-          if (session.user == null) return;
-          if (tgMsg.text === "SUPPRIMER MON COMPTE") {
-            await User.deleteOne({
-              _id: session.user._id
-            });
-            await session.sendMessage(
-              `🗑 Votre profil a bien été supprimé ! 👋\nUn profil vierge sera créé lors de l'ajout du prochain suivi ⚠️`
-            );
-            await session.log({ event: "/user-deletion-self" });
-          } else {
-            await session.sendMessage("Suppression annulée.");
-          }
-        })();
-      }
-    );
+    const tgMsg = await tgSession.waitForReply(question.message_id);
+    const replyText = "text" in tgMsg ? tgMsg.text : undefined;
+
+    if (session.user == null) return;
+    if (replyText === "SUPPRIMER MON COMPTE") {
+      await User.deleteOne({
+        _id: session.user._id
+      });
+      await session.sendMessage(
+        `🗑 Votre profil a bien été supprimé ! 👋\nUn profil vierge sera créé lors de l'ajout du prochain suivi ⚠️`
+      );
+      await session.log({ event: "/user-deletion-self" });
+    } else {
+      await session.sendMessage("Suppression annulée.");
+    }
   } catch (error) {
     console.log(error);
   }

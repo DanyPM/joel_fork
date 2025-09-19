@@ -2,11 +2,10 @@ import { expect } from "@jest/globals";
 import mongoose, { Types } from "mongoose";
 import User, { USER_SCHEMA_VERSION } from "../models/User.ts";
 import { ISession, IUser } from "../types.ts";
-import { ChatId } from "node-telegram-bot-api";
 import { LegacyRawUser_V1 } from "../models/LegacyUser.js";
 import { FunctionTags } from "../entities/FunctionTags.ts";
 
-const userMockChatId = 12346789 as ChatId;
+const userMockChatId = "12346789";
 
 const exampleLegacyFollowedFunctions: LegacyRawUser_V1["followedFunctions"] = [
   "ambassadeur" as FunctionTags,

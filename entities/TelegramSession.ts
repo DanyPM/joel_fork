@@ -1,5 +1,6 @@
+import { Telegraf } from "telegraf";
+import { Message } from "telegraf/typings/core/types/typegram";
 import { ISession, IUser, MessageApp } from "../types.ts";
-import TelegramBot, { ChatId } from "node-telegram-bot-api";
 import User from "../models/User.ts";
 import { loadUser } from "./Session.ts";
 import umami from "../utils/umami.ts";
@@ -7,6 +8,7 @@ import { splitText } from "../utils/text.utils.ts";
 import { ErrorMessages } from "./ErrorMessages.ts";
 import axios, { AxiosError, isAxiosError } from "axios";
 import { Keyboard, KEYBOARD_KEYS } from "./Keyboard.ts";
+import { TelegramReplyManager } from "../utils/TelegramReplyManager.ts";
 
 const TELEGRAM_MESSAGE_CHAR_LIMIT = 3000;
 const TELEGRAM_COOL_DOWN_DELAY_SECONDS = 1; // 1 message per second for the same user
@@ -19,13 +21,13 @@ const mainMenuKeyboardTelegram: Keyboard = [
   [KEYBOARD_KEYS.HELP.key]
 ];
 
-export const telegramMessageOptions: TelegramBot.SendMessageOptions = {
-  parse_mode: "Markdown",
+export const telegramMessageOptions = {
+  parse_mode: "Markdown" as const,
   disable_web_page_preview: true,
   reply_markup: {
     selective: true,
     resize_keyboard: true,
-    keyboard: []
+    keyboard: [] as { text: string }[][]
   }
 };
 
@@ -33,20 +35,27 @@ const TelegramMessageApp: MessageApp = "Telegram";
 
 export class TelegramSession implements ISession {
   messageApp = TelegramMessageApp;
-  telegramBot: TelegramBot;
+  telegramBot: Telegraf;
   language_code: string;
   chatId: string;
-  chatIdTg: ChatId;
+  chatIdTg: number;
   user: IUser | null | undefined = undefined;
   isReply: boolean | undefined;
   mainMenuKeyboard: Keyboard;
+  private readonly replyManager: TelegramReplyManager;
 
   log = umami.log;
 
-  constructor(telegramBot: TelegramBot, chatId: string, language_code: string) {
+  constructor(
+    telegramBot: Telegraf,
+    replyManager: TelegramReplyManager,
+    chatId: string,
+    language_code: string
+  ) {
     this.telegramBot = telegramBot;
+    this.replyManager = replyManager;
     this.chatId = chatId;
-    this.chatIdTg = parseInt(chatId) as ChatId;
+    this.chatIdTg = parseInt(chatId);
     this.language_code = language_code;
     this.mainMenuKeyboard = mainMenuKeyboardTelegram;
   }
@@ -62,7 +71,7 @@ export class TelegramSession implements ISession {
   }
 
   async sendTypingAction() {
-    await this.telegramBot.sendChatAction(this.chatIdTg, "typing");
+    await this.telegramBot.telegram.sendChatAction(this.chatIdTg, "typing");
   }
 
   async sendMessage(formattedData: string, keyboard?: Keyboard): Promise<void> {
@@ -86,13 +95,13 @@ export class TelegramSession implements ISession {
 
     for (let i = 0; i < mArr.length; i++) {
       if (i == mArr.length - 1 && keyboard !== undefined) {
-        await this.telegramBot.sendMessage(
+        await this.telegramBot.telegram.sendMessage(
           this.chatIdTg,
           mArr[i],
           tgMessageOptions
         );
       } else {
-        await this.telegramBot.sendMessage(
+        await this.telegramBot.telegram.sendMessage(
           this.chatIdTg,
           mArr[i],
           telegramMessageOptions
@@ -105,6 +114,10 @@ export class TelegramSession implements ISession {
         setTimeout(resolve, TELEGRAM_COOL_DOWN_DELAY_SECONDS * 1000)
       );
     }
+  }
+
+  waitForReply(messageId: number): Promise<Message> {
+    return this.replyManager.waitForReply(this.chatId, messageId);
   }
 }
 

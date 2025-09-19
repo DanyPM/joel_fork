@@ -1,6 +1,5 @@
 import User from "../models/User.ts";
 import { FunctionTags } from "../entities/FunctionTags.ts";
-import TelegramBot from "node-telegram-bot-api";
 import {
   extractTelegramSession,
   TelegramSession
@@ -52,34 +51,26 @@ export const followFunctionCommand = async (
       if (tgSession == null) return;
       const tgBot = tgSession.telegramBot;
 
-      const question = await tgBot.sendMessage(tgSession.chatId, text, {
+      const question = await tgBot.telegram.sendMessage(tgSession.chatId, text, {
         reply_markup: {
           force_reply: true
         }
       });
 
-      tgBot.onReplyToMessage(
-        tgSession.chatId,
-        question.message_id,
-        (tgMsg: TelegramBot.Message) => {
-          void (async () => {
-            if (tgMsg.text == undefined || tgMsg.text.length == 0) {
-              await tgSession.sendMessage(
-                `Votre réponse n'a pas été reconnue: merci de renseigner une ou plusieurs options entre 1 et ${String(functionTagValues.length)}. 👎 Veuillez essayer de nouveau la commande.`,
-                [
-                  [KEYBOARD_KEYS.FUNCTION_FOLLOW.key],
-                  [KEYBOARD_KEYS.MAIN_MENU.key]
-                ]
-              );
-              return;
-            }
-            await followFunctionFromStrCommand(
-              session,
-              "SuivreF " + tgMsg.text
-            );
-          })();
-        }
-      );
+      const tgMsg = await tgSession.waitForReply(question.message_id);
+      const replyText = "text" in tgMsg ? tgMsg.text : undefined;
+
+      if (replyText == undefined || replyText.length === 0) {
+        await tgSession.sendMessage(
+          `Votre réponse n'a pas été reconnue: merci de renseigner une ou plusieurs options entre 1 et ${String(functionTagValues.length)}. 👎 Veuillez essayer de nouveau la commande.`,
+          [
+            [KEYBOARD_KEYS.FUNCTION_FOLLOW.key],
+            [KEYBOARD_KEYS.MAIN_MENU.key]
+          ]
+        );
+        return;
+      }
+      await followFunctionFromStrCommand(session, "SuivreF " + replyText);
     } else {
       text += "Exemples: SuivreF 1 4 7";
       await session.sendMessage(text);

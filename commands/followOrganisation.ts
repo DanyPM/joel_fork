@@ -1,5 +1,4 @@
 import umami from "../utils/umami.ts";
-import TelegramBot from "node-telegram-bot-api";
 import Organisation from "../models/Organisation.ts";
 import User from "../models/User.ts";
 import { IOrganisation, ISession, IUser, WikidataId } from "../types.ts";
@@ -73,7 +72,7 @@ export const followOrganisationTelegram = async (session: ISession) => {
     const tgBot = tgSession.telegramBot;
 
     await session.sendTypingAction();
-    const question: TelegramBot.Message = await tgBot.sendMessage(
+    const question = await tgBot.telegram.sendMessage(
       session.chatId,
       `Entrez le *nom* ou l'*identifiant* [Wikidata](https://www.wikidata.org/wiki/Wikidata:Main_Page) de l'organisation que vous souhaitez suivre:
 Exemples:
@@ -86,18 +85,14 @@ Exemples:
         }
       }
     );
-    tgBot.onReplyToMessage(
-      session.chatId,
-      question.message_id,
-      (tgMsg1: TelegramBot.Message) => {
-        void (async () => {
-          await searchOrganisationFromStr(
-            session,
-            "SuivreO " + (tgMsg1.text ?? ""),
-            false
-          );
-        })();
-      }
+
+    const tgMsg1 = await tgSession.waitForReply(question.message_id);
+    const replyText1 = "text" in tgMsg1 ? tgMsg1.text : undefined;
+
+    await searchOrganisationFromStr(
+      session,
+      "SuivreO " + (replyText1 ?? ""),
+      false
     );
   } catch (error) {
     console.log(error);
@@ -196,7 +191,7 @@ export const searchOrganisationFromStr = async (
         if (tgSession == null) return;
         const tgBot = tgSession.telegramBot;
 
-        const question = await tgBot.sendMessage(
+        const question = await tgBot.telegram.sendMessage(
           session.chatId,
           "Entrez le(s) nombre(s) correspondant au(x) organisation(s) à suivre.\nExemple: 1 4 7",
           {
@@ -206,20 +201,14 @@ export const searchOrganisationFromStr = async (
           }
         );
 
-        tgBot.onReplyToMessage(
-          session.chatId,
-          question.message_id,
-          (tgMsg3: TelegramBot.Message) => {
-            void (async () => {
-              const answers = parseIntAnswers(tgMsg3.text, orgResults.length);
-              await followOrganisationsFromWikidataIdStr(
-                session,
-                `SuivreO ${answers.map((k) => orgResults[k - 1].wikidataId).join(" ")}`,
-                false
-              );
-              return;
-            })();
-          }
+        const tgMsg3 = await tgSession.waitForReply(question.message_id);
+        const replyText3 = "text" in tgMsg3 ? tgMsg3.text : undefined;
+
+        const answers = parseIntAnswers(replyText3 ?? "", orgResults.length);
+        await followOrganisationsFromWikidataIdStr(
+          session,
+          `SuivreO ${answers.map((k) => orgResults[k - 1].wikidataId).join(" ")}`,
+          false
         );
       } else {
         await session.sendMessage(

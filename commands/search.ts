@@ -1,5 +1,4 @@
 import { formatSearchResult } from "../utils/formatSearchResult.ts";
-import TelegramBot from "node-telegram-bot-api";
 import {
   callJORFSearchPeople,
   cleanPeopleName
@@ -42,7 +41,7 @@ export const searchCommand = async (session: ISession): Promise<void> => {
   const tgBot = tgSession.telegramBot;
 
   await session.sendTypingAction();
-  const question = await tgBot.sendMessage(
+  const question = await tgBot.telegram.sendMessage(
     session.chatId,
     "Entrez le prénom et nom de la personne que vous souhaitez rechercher:",
     {
@@ -51,28 +50,23 @@ export const searchCommand = async (session: ISession): Promise<void> => {
       }
     }
   );
-  tgBot.onReplyToMessage(
-    session.chatId,
-    question.message_id,
-    (tgMsg: TelegramBot.Message) => {
-      void (async () => {
-        if (tgMsg.text == undefined || tgMsg.text.length == 0) {
-          await session.sendMessage(
-            `Votre réponse n'a pas été reconnue. 👎\n\nVeuillez essayer de nouveau la commande.`,
-            [
-              [KEYBOARD_KEYS.PEOPLE_SEARCH_NEW.key],
-              [KEYBOARD_KEYS.MAIN_MENU.key]
-            ]
-          );
-          return;
-        }
-        await searchPersonHistory(
-          session,
-          "Historique " + tgMsg.text,
-          "latest"
-        );
-      })();
-    }
+  const tgMsg = await tgSession.waitForReply(question.message_id);
+  const replyText = "text" in tgMsg ? tgMsg.text : undefined;
+
+  if (replyText == undefined || replyText.length == 0) {
+    await session.sendMessage(
+      `Votre réponse n'a pas été reconnue. 👎\n\nVeuillez essayer de nouveau la commande.`,
+      [
+        [KEYBOARD_KEYS.PEOPLE_SEARCH_NEW.key],
+        [KEYBOARD_KEYS.MAIN_MENU.key]
+      ]
+    );
+    return;
+  }
+  await searchPersonHistory(
+    session,
+    "Historique " + replyText,
+    "latest"
   );
 };
 
