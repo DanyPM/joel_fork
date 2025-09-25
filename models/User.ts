@@ -1,13 +1,70 @@
 import { Schema as _Schema, Types, model } from "mongoose";
 const Schema = _Schema;
 import umami from "../utils/umami.ts";
-import { ISession, IPeople, IUser, UserModel } from "../types.ts";
+import {
+  FollowedMetaGranularity,
+  FollowedMetaFilters,
+  ISession,
+  IPeople,
+  IUser,
+  UserModel
+} from "../types.ts";
 import { FunctionTags } from "../entities/FunctionTags.ts";
 import { loadUser } from "../entities/Session.ts";
 import { cleanPeopleName } from "../utils/JORFSearch.utils.ts";
 import { getISOWeek } from "../utils/date.utils.ts";
 
-export const USER_SCHEMA_VERSION = 2;
+export const USER_SCHEMA_VERSION = 3;
+
+const FollowedMetaFiltersSchema = new Schema<FollowedMetaFilters>(
+  {
+    nors: {
+      type: [String],
+      default: undefined
+    },
+    ministeres: {
+      type: [String],
+      default: undefined
+    },
+    autorites: {
+      type: [String],
+      default: undefined
+    },
+    tags: {
+      type: [String],
+      default: undefined
+    }
+  },
+  { _id: false }
+);
+
+const FollowedMetaPreferenceSchema = new Schema<{
+  metaId: string;
+  granularity: FollowedMetaGranularity;
+  filters?: FollowedMetaFilters;
+  lastUpdate: Date;
+}>(
+  {
+    metaId: {
+      type: String,
+      required: true
+    },
+    granularity: {
+      type: String,
+      enum: ["publication", "ministere", "autorite", "tag", "custom"],
+      default: "publication"
+    },
+    filters: {
+      type: FollowedMetaFiltersSchema,
+      default: undefined
+    },
+    lastUpdate: {
+      type: Date,
+      default: Date.now
+    }
+  },
+  { _id: false }
+);
 
 const UserSchema = new Schema<IUser, UserModel>(
   {
@@ -76,18 +133,7 @@ const UserSchema = new Schema<IUser, UserModel>(
       default: []
     },
     followedMeta: {
-      // Placeholder before implementation
-      type: [
-        {
-          metaType: {
-            type: String
-          },
-          lastUpdate: {
-            type: Date,
-            default: Date.now
-          }
-        }
-      ],
+      type: [FollowedMetaPreferenceSchema],
       default: []
     },
     schemaVersion: {

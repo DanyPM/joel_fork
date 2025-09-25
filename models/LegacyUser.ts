@@ -1,6 +1,11 @@
 import { FunctionTags } from "../entities/FunctionTags.ts";
 import { Document, Types } from "mongoose";
-import { IUser, MessageApp, WikidataId } from "../types.ts";
+import {
+  FollowedMetaPreference,
+  IUser,
+  MessageApp,
+  WikidataId
+} from "../types.ts";
 
 export type IRawUser = LegacyRawUser_V2 | IUser;
 
@@ -23,10 +28,12 @@ export interface LegacyRawUser_V2 extends Document {
     functionTag: FunctionTags;
     lastUpdate: Date;
   }[];
-  followedMeta: {
-    metaType: string;
-    lastUpdate: Date;
-  }[];
+  followedMeta:
+    | {
+        metaType: string;
+        lastUpdate: Date;
+      }[]
+    | FollowedMetaPreference[];
 
   lastInteractionDay?: Date;
   lastInteractionWeek?: Date;
