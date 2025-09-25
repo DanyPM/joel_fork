@@ -1,5 +1,6 @@
 import { Model, Types } from "mongoose";
 import { FunctionTags } from "./entities/FunctionTags";
+import { JORFSearchPublication } from "./entities/JORFSearchResponseMeta.ts";
 import { Keyboard } from "./Keyboard.ts";
 import umami from "./utils/umami";
 
@@ -50,10 +51,7 @@ export interface IUser {
     functionTag: FunctionTags;
     lastUpdate: Date;
   }[];
-  followedMeta: {
-    metaType: string;
-    lastUpdate: Date;
-  }[];
+  followedMeta: FollowedMetaPreference[];
 
   lastMessageReceivedAt?: Date;
 
@@ -83,6 +81,27 @@ export interface IUser {
   removeFollowedFunction: (arg0: FunctionTags) => Promise<boolean>;
   removeFollowedName: (arg0: string) => Promise<boolean>;
   followsNothing: () => boolean;
+}
+
+export type FollowedMetaGranularity =
+  | "publication"
+  | "ministere"
+  | "autorite"
+  | "tag"
+  | "custom";
+
+export interface FollowedMetaFilters {
+  nors?: string[];
+  ministeres?: string[];
+  autorites?: string[];
+  tags?: (keyof JORFSearchPublication["tags"])[];
+}
+
+export interface FollowedMetaPreference {
+  metaId: string;
+  granularity: FollowedMetaGranularity;
+  filters?: FollowedMetaFilters;
+  lastUpdate: Date;
 }
 
 export interface IOrganisation {

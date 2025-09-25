@@ -27,6 +27,23 @@ const exampleFollowedOrganisations: IUser["followedOrganisations"] = [
   { wikidataId: "987654321", lastUpdate: new Date() }
 ];
 
+const exampleFollowedMeta: IUser["followedMeta"] = [
+  {
+    metaId: "JORFMETA000000000001",
+    granularity: "publication",
+    lastUpdate: new Date("2024-01-01T00:00:00.000Z")
+  },
+  {
+    metaId: "JORFMETA000000000002",
+    granularity: "tag",
+    filters: {
+      tags: ["mesure_nominative"],
+      ministeres: ["Ministère de la culture"]
+    },
+    lastUpdate: new Date("2024-02-02T00:00:00.000Z")
+  }
+];
+
 const MockTelegramSession = {
   chatId: userMockChatId,
   messageApp: "Telegram",
@@ -74,7 +91,7 @@ const currentUserData_withFollows = {
   followedFunctions: exampleCurrentFollowedFunctions,
   followedNames: exampleFollowedNames,
   followedOrganisations: exampleFollowedOrganisations,
-  followedMeta: [],
+  followedMeta: exampleFollowedMeta,
   lastInteractionDay: Date.now(),
   lastInteractionMonth: Date.now(),
   lastInteractionWeek: Date.now(),
@@ -171,6 +188,15 @@ describe("User Model Test Suite", () => {
 
         expect(userFromDBLean.followedNames).toEqual(
           user.data.followedNames ?? []
+        );
+
+        userFromDBLean.followedMeta = userFromDBLean.followedMeta.map(
+          ({ metaId, granularity, filters, lastUpdate }) => ({
+            metaId,
+            granularity,
+            filters,
+            lastUpdate
+          })
         );
 
         expect(userFromDBLean.followedMeta).toEqual(
