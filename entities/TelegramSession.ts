@@ -163,6 +163,11 @@ export async function sendTelegramMessage(
   }
   const mArr = splitText(message, TELEGRAM_MESSAGE_CHAR_LIMIT);
 
+  const keyboardMarkup =
+    keyboard === undefined
+      ? undefined
+      : keyboard.map((row) => row.map(({ text }) => ({ text })));
+
   if (BOT_TOKEN === undefined) {
     throw new Error(ErrorMessages.TELEGRAM_BOT_TOKEN_NOT_SET);
   }
@@ -172,16 +177,16 @@ export async function sendTelegramMessage(
       const payload: Record<string, unknown> = {
         chat_id: chatId,
         text: mArr[i],
-        parse_mode: "markdown",
+        parse_mode: "Markdown",
         link_preview_options: {
           is_disabled: true
         }
       };
-      if (i == mArr.length - 1 && keyboard !== undefined) {
+      if (i === mArr.length - 1 && keyboardMarkup !== undefined) {
         payload.reply_markup = {
           selective: true,
           resize_keyboard: true,
-          keyboard: keyboard
+          keyboard: keyboardMarkup
         };
       }
       await axios.post(

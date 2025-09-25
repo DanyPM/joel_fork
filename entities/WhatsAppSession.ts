@@ -166,9 +166,11 @@ export async function sendWhatsAppMessage(
 
   let interactiveKeyboard: ActionList | ActionButtons | null = null;
 
-  if (options?.keyboard == null && !options?.forceNoKeyboard)
+  const forceNoKeyboard = options?.forceNoKeyboard ?? false;
+
+  if (!forceNoKeyboard && options?.keyboard == null)
     interactiveKeyboard = fullMenuKeyboard;
-  else if (options.keyboard != null) {
+  else if (!forceNoKeyboard && options.keyboard != null) {
     const keyboardFlat = replaceWHButtons(options.keyboard).flat();
     if (keyboardFlat.length > 3) {
       console.log(
