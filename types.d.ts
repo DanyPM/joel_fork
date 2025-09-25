@@ -1,6 +1,13 @@
 import { Model, Types } from "mongoose";
 import { FunctionTags } from "./entities/FunctionTags";
 import { Keyboard } from "./Keyboard.ts";
+import {
+  JORFSearchMetaFilter,
+  JORFSearchMetaGranularity,
+  JORFSearchMetaModule,
+  UserMetaFollowPreference
+} from "./entities/JORFSearchMetaItem.ts";
+export { UserMetaFollowPreference } from "./entities/JORFSearchMetaItem.ts";
 import umami from "./utils/umami";
 
 export interface CommandType {
@@ -50,10 +57,7 @@ export interface IUser {
     functionTag: FunctionTags;
     lastUpdate: Date;
   }[];
-  followedMeta: {
-    metaType: string;
-    lastUpdate: Date;
-  }[];
+  followedMeta: IUserFollowedMetaPreference[];
 
   lastMessageReceivedAt?: Date;
 
@@ -82,7 +86,24 @@ export interface IUser {
   removeFollowedPeople: (arg0: IPeople) => Promise<boolean>;
   removeFollowedFunction: (arg0: FunctionTags) => Promise<boolean>;
   removeFollowedName: (arg0: string) => Promise<boolean>;
+  checkFollowedMeta: (arg0: UserMetaFollowPreference) => boolean;
+  addFollowedMeta: (
+    arg0: UserMetaFollowPreference
+  ) => Promise<boolean>;
+  removeFollowedMeta: (
+    arg0: UserMetaFollowPreference
+  ) => Promise<boolean>;
   followsNothing: () => boolean;
+}
+
+export interface IUserFollowedMetaFilter extends JORFSearchMetaFilter {}
+
+export interface IUserFollowedMetaPreference
+  extends UserMetaFollowPreference {
+  module: JORFSearchMetaModule;
+  granularity: JORFSearchMetaGranularity;
+  filters: IUserFollowedMetaFilter[];
+  lastUpdate: Date;
 }
 
 export interface IOrganisation {

@@ -1,4 +1,9 @@
-import { ISession, IUser, MessageApp } from "../types.ts";
+import {
+  ISession,
+  IUser,
+  IUserFollowedMetaPreference,
+  MessageApp
+} from "../types.ts";
 import { USER_SCHEMA_VERSION } from "../models/User.ts";
 import User from "../models/User.ts";
 import { IRawUser, LegacyRawUser_V2 } from "../models/LegacyUser.ts";
@@ -46,9 +51,13 @@ export async function loadUser(session: ISession): Promise<IUser | null> {
 }
 
 export async function migrateUser(rawUser: IRawUser): Promise<void> {
-  if (rawUser.schemaVersion === USER_SCHEMA_VERSION) return;
+  const currentVersion = rawUser.schemaVersion ?? 1;
 
-  if (rawUser.schemaVersion < 3) {
+  if (currentVersion === USER_SCHEMA_VERSION) return;
+
+  let workingVersion = currentVersion;
+
+  if (workingVersion < 3) {
     const legacyUser = rawUser as LegacyRawUser_V2;
 
     try {
@@ -56,13 +65,43 @@ export async function migrateUser(rawUser: IRawUser): Promise<void> {
         { messageApp: legacyUser.messageApp, chatId: legacyUser.chatId },
         { $set: { schemaVersion: 3, chatId: legacyUser.chatId.toString() } }
       );
+      workingVersion = 3;
+    } catch (err) {
+      console.error("Migration failed:", err);
+      return;
+    }
+  }
+
+  if (workingVersion < 4) {
+    const legacyUser = rawUser as LegacyRawUser_V2;
+    const normalizedMeta: IUserFollowedMetaPreference[] = (
+      legacyUser.followedMeta ?? []
+    ).map((meta) => ({
+      module: meta.metaType ?? "custom",
+      granularity: "module",
+      identifier: meta.metaType,
+      label: meta.metaType,
+      filters: [],
+      lastUpdate: meta.lastUpdate ?? new Date()
+    }));
+
+    try {
+      await User.collection.updateOne(
+        { messageApp: legacyUser.messageApp, chatId: legacyUser.chatId },
+        {
+          $set: {
+            schemaVersion: USER_SCHEMA_VERSION,
+            followedMeta: normalizedMeta
+          }
+        }
+      );
     } catch (err) {
       console.error("Migration failed:", err);
     }
-  } else {
-    throw new Error("Unknown schema version");
+    return;
   }
-  return;
+
+  throw new Error("Unknown schema version");
 }
 
 export async function recordSuccessfulDelivery(

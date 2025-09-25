@@ -27,6 +27,20 @@ const exampleFollowedOrganisations: IUser["followedOrganisations"] = [
   { wikidataId: "987654321", lastUpdate: new Date() }
 ];
 
+const exampleFollowedMeta: IUser["followedMeta"] = [
+  {
+    module: "publication",
+    granularity: "item",
+    identifier: "JORF123456789",
+    label: "JORF Publication JORF123456789",
+    filters: [
+      { key: "ministere", value: "Ministère de l'Intérieur" },
+      { key: "mesure_nominative", value: true }
+    ],
+    lastUpdate: new Date()
+  }
+];
+
 const MockTelegramSession = {
   chatId: userMockChatId,
   messageApp: "Telegram",
@@ -74,11 +88,11 @@ const currentUserData_withFollows = {
   followedFunctions: exampleCurrentFollowedFunctions,
   followedNames: exampleFollowedNames,
   followedOrganisations: exampleFollowedOrganisations,
-  followedMeta: [],
+  followedMeta: exampleFollowedMeta,
   lastInteractionDay: Date.now(),
   lastInteractionMonth: Date.now(),
   lastInteractionWeek: Date.now(),
-  schemaVersion: 2,
+  schemaVersion: USER_SCHEMA_VERSION,
   createAt: Date.now(),
   updatedAt: Date.now()
 };
@@ -124,6 +138,18 @@ describe("User Model Test Suite", () => {
             lastUpdate: f.lastUpdate
           })
         );
+
+        userFromDBLean.followedMeta = userFromDBLean.followedMeta.map((m) => ({
+          module: m.module,
+          granularity: m.granularity,
+          identifier: m.identifier,
+          label: m.label,
+          filters: m.filters.map((filter) => ({
+            key: filter.key,
+            value: filter.value
+          })),
+          lastUpdate: m.lastUpdate
+        }));
 
         expect(userFromDBLean.schemaVersion).toBe(USER_SCHEMA_VERSION);
 

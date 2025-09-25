@@ -1,13 +1,40 @@
 import { Schema as _Schema, Types, model } from "mongoose";
 const Schema = _Schema;
 import umami from "../utils/umami.ts";
-import { ISession, IPeople, IUser, UserModel } from "../types.ts";
+import {
+  ISession,
+  IPeople,
+  IUser,
+  IUserFollowedMetaPreference,
+  UserMetaFollowPreference,
+  UserModel
+} from "../types.ts";
 import { FunctionTags } from "../entities/FunctionTags.ts";
 import { loadUser } from "../entities/Session.ts";
 import { cleanPeopleName } from "../utils/JORFSearch.utils.ts";
 import { getISOWeek } from "../utils/date.utils.ts";
 
-export const USER_SCHEMA_VERSION = 2;
+export const USER_SCHEMA_VERSION = 4;
+
+function sortMetaFilters(
+  filters: IUserFollowedMetaPreference["filters"]
+): IUserFollowedMetaPreference["filters"] {
+  return [...filters].sort((a, b) => a.key.localeCompare(b.key));
+}
+
+function areMetaFiltersEqual(
+  a: IUserFollowedMetaPreference["filters"],
+  b: IUserFollowedMetaPreference["filters"]
+): boolean {
+  if (a.length !== b.length) return false;
+  const sortedA = sortMetaFilters(a);
+  const sortedB = sortMetaFilters(b);
+  return sortedA.every((filter, index) => {
+    const other = sortedB[index];
+    if (filter.key !== other.key) return false;
+    return filter.value === other.value;
+  });
+}
 
 const UserSchema = new Schema<IUser, UserModel>(
   {
@@ -76,11 +103,31 @@ const UserSchema = new Schema<IUser, UserModel>(
       default: []
     },
     followedMeta: {
-      // Placeholder before implementation
       type: [
         {
-          metaType: {
+          module: {
+            type: String,
+            required: true
+          },
+          granularity: {
+            type: String,
+            enum: ["module", "collection", "item", "filter"],
+            required: true
+          },
+          identifier: {
             type: String
+          },
+          label: {
+            type: String
+          },
+          filters: {
+            type: [
+              {
+                key: { type: String, required: true },
+                value: { type: Schema.Types.Mixed, required: true }
+              }
+            ],
+            default: []
           },
           lastUpdate: {
             type: Date,
@@ -301,6 +348,100 @@ UserSchema.method(
 );
 
 UserSchema.method(
+  "checkFollowedMeta",
+  function checkFollowedMeta(
+    this: IUser,
+    preference: UserMetaFollowPreference
+  ): boolean {
+    const normalizedFilters: IUserFollowedMetaPreference["filters"] = (
+      preference.filters ?? []
+    ).map((filter) => ({
+      key: filter.key,
+      value: filter.value
+    }));
+
+    return this.followedMeta.some((meta) => {
+      return (
+        meta.module === preference.module &&
+        meta.granularity === preference.granularity &&
+        meta.identifier === preference.identifier &&
+        areMetaFiltersEqual(meta.filters, normalizedFilters)
+      );
+    });
+  }
+);
+
+UserSchema.method(
+  "addFollowedMeta",
+  async function addFollowedMeta(
+    this: IUser,
+    preference: UserMetaFollowPreference
+  ) {
+    const normalizedFilters: IUserFollowedMetaPreference["filters"] = (
+      preference.filters ?? []
+    ).map((filter) => ({
+      key: filter.key,
+      value: filter.value
+    }));
+
+    if (
+      this.checkFollowedMeta({
+        ...preference,
+        filters: normalizedFilters
+      })
+    ) {
+      return false;
+    }
+
+    const metaPreference: IUserFollowedMetaPreference = {
+      module: preference.module,
+      granularity: preference.granularity,
+      identifier: preference.identifier,
+      label: preference.label,
+      filters: normalizedFilters,
+      lastUpdate: new Date()
+    };
+
+    this.followedMeta.push(metaPreference);
+    await this.save();
+    return true;
+  }
+);
+
+UserSchema.method(
+  "removeFollowedMeta",
+  async function removeFollowedMeta(
+    this: IUser,
+    preference: UserMetaFollowPreference
+  ) {
+    const normalizedFilters: IUserFollowedMetaPreference["filters"] = (
+      preference.filters ?? []
+    ).map((filter) => ({
+      key: filter.key,
+      value: filter.value
+    }));
+
+    if (
+      !this.checkFollowedMeta({
+        ...preference,
+        filters: normalizedFilters
+      })
+    )
+      return false;
+
+    this.followedMeta = this.followedMeta.filter((meta) => {
+      if (meta.module !== preference.module) return true;
+      if (meta.granularity !== preference.granularity) return true;
+      if (meta.identifier !== preference.identifier) return true;
+      return !areMetaFiltersEqual(meta.filters, normalizedFilters);
+    });
+
+    await this.save();
+    return true;
+  }
+);
+
+UserSchema.method(
   "followsNothing",
   function followsNothing(this: IUser): boolean {
     return (
@@ -317,5 +458,10 @@ UserSchema.method(
 UserSchema.index({ "followedPeople.peopleId": 1 });
 UserSchema.index({ "followedFunctions.functionTag": 1 });
 UserSchema.index({ "followedOrganisations.wikidataId": 1 });
+UserSchema.index({
+  "followedMeta.module": 1,
+  "followedMeta.identifier": 1,
+  "followedMeta.granularity": 1
+});
 
 export default model<IUser, UserModel>("User", UserSchema);
