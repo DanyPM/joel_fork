@@ -203,6 +203,46 @@ describe("processMessage", () => {
     expect(defaultCommand).not.toHaveBeenCalled();
   });
 
+  it("falls back to the default command which sends a reply when nothing matches", async () => {
+    registerSharedMocks();
+
+    const session = baseSession({
+      log: jest.fn().mockResolvedValue(undefined),
+      sendMessage: jest.fn().mockResolvedValue(undefined)
+    });
+
+    jest.unstable_mockModule("../entities/Keyboard.ts", () => ({
+      KEYBOARD_KEYS: {}
+    }));
+
+    jest.unstable_mockModule("../commands/start.ts", () => ({
+      startCommand: jest.fn()
+    }));
+
+    const clearFollowUp = jest.fn();
+    const handleFollowUpMessage = jest
+      .fn()
+      .mockResolvedValue(false);
+    jest.unstable_mockModule("../entities/FollowUpManager.ts", () => ({
+      handleFollowUpMessage,
+      clearFollowUp
+    }));
+
+    const { processMessage } = await import("../commands/Commands.ts");
+
+    await processMessage(session, "something unrecognised");
+
+    expect(handleFollowUpMessage).toHaveBeenCalledWith(
+      session,
+      "something unrecognised"
+    );
+    expect(session.sendMessage).toHaveBeenCalledTimes(1);
+    expect(session.sendMessage).toHaveBeenCalledWith(
+      "Je n'ai pas compris votre message 🥺",
+      { separateMenuMessage: true }
+    );
+  });
+
   it("routes regex matches to the correct command handler", async () => {
     registerSharedMocks();
     const session = defaultSession();
