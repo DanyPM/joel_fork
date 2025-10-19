@@ -18,6 +18,7 @@ import {
   groupRecordsBy,
   SeparatorSelector
 } from "./grouping.ts";
+import { getLatestSourceDate } from "./lastUpdate.utils.ts";
 
 const DEFAULT_GROUP_SEPARATOR = "====================\n\n";
 const DEFAULT_SUBGROUP_SEPARATOR = "\n--------------------\n\n";
@@ -108,8 +109,6 @@ export async function notifyOrganisationsUpdates(
     });
   });
 
-  const now = new Date();
-
   const userUpdateTasks: NotificationTask<WikidataId>[] = [];
 
   for (const user of usersFollowingOrganisations) {
@@ -163,24 +162,22 @@ export async function notifyOrganisationsUpdates(
       );
 
       if (messageSent) {
-        await User.updateOne(
-          {
-            _id: task.userId,
-            "followedOrganisations.wikidataId": {
-              $in: [...task.updatedRecordsMap.keys()]
-            }
-          },
-          { $set: { "followedOrganisations.$[elem].lastUpdate": now } },
-          {
-            arrayFilters: [
+        const updateOperations = [...task.updatedRecordsMap.entries()].map(
+          async ([wikidataId, records]) => {
+            const latestDate = getLatestSourceDate(records);
+            if (latestDate == null) return;
+
+            await User.updateOne(
               {
-                "elem.wikidataId": {
-                  $in: [...task.updatedRecordsMap.keys()]
-                }
-              }
-            ]
+                _id: task.userId,
+                "followedOrganisations.wikidataId": wikidataId
+              },
+              { $set: { "followedOrganisations.$.lastUpdate": latestDate } }
+            );
           }
         );
+
+        await Promise.all(updateOperations);
       }
     }
   );

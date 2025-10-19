@@ -15,6 +15,7 @@ import {
   NotificationTask,
   dispatchTasksToMessageApps
 } from "../utils/notificationDispatch.ts";
+import { getLatestSourceDate } from "./lastUpdate.utils.ts";
 
 const DEFAULT_GROUP_SEPARATOR = "\n====================\n\n";
 
@@ -103,8 +104,6 @@ export async function notifyPeopleUpdates(
 
   const userUpdateTasks: NotificationTask<string>[] = [];
 
-  const now = new Date();
-
   const peopleIdMapByStr = new Map<string, Types.ObjectId>();
   updatedPeopleList.forEach((p) => {
     peopleIdMapByStr.set(p._id.toString(), p._id);
@@ -158,34 +157,30 @@ export async function notifyPeopleUpdates(
     );
 
     if (messageSent) {
-      const updatedRecordsPeopleId = [...task.updatedRecordsMap.keys()]
-        .map((idStr) => peopleIdMapByStr.get(idStr))
-        .reduce((tab: Types.ObjectId[], id) => {
-          if (id === undefined) {
+      const updateOperations = [...task.updatedRecordsMap.entries()].map(
+        async ([peopleIdStr, records]) => {
+          const peopleId = peopleIdMapByStr.get(peopleIdStr);
+          if (peopleId === undefined) {
             console.log(
               "Cannot fetch people id from string during the update of user people follows"
             );
-            return tab;
+            return;
           }
-          return tab.concat(id);
-        }, []);
 
-      await User.updateOne(
-        {
-          _id: task.userId,
-          "followedPeople.peopleId": {
-            $in: updatedRecordsPeopleId
-          }
-        },
-        { $set: { "followedPeople.$[elem].lastUpdate": now } },
-        {
-          arrayFilters: [
+          const latestDate = getLatestSourceDate(records);
+          if (latestDate == null) return;
+
+          await User.updateOne(
             {
-              "elem.peopleId": { $in: updatedRecordsPeopleId }
-            }
-          ]
+              _id: task.userId,
+              "followedPeople.peopleId": peopleId
+            },
+            { $set: { "followedPeople.$.lastUpdate": latestDate } }
+          );
         }
       );
+
+      await Promise.all(updateOperations);
     }
   });
 }

@@ -11,6 +11,7 @@ import {
   NotificationTask,
   dispatchTasksToMessageApps
 } from "../utils/notificationDispatch.ts";
+import { getLatestSourceDate } from "./lastUpdate.utils.ts";
 import {
   LeafFormatter,
   NotificationGroupingConfig,
@@ -111,8 +112,6 @@ export async function notifyFunctionTagsUpdates(
   ).lean();
   if (usersFollowingTags.length === 0) return;
 
-  const now = new Date();
-
   const userUpdateTasks: NotificationTask<FunctionTags>[] = [];
 
   for (const user of usersFollowingTags) {
@@ -163,22 +162,22 @@ export async function notifyFunctionTagsUpdates(
       );
 
       if (messageSent) {
-        await User.updateOne(
-          {
-            _id: task.userId,
-            "followedFunctions.functionTag": {
-              $in: [...task.updatedRecordsMap.keys()]
-            }
-          },
-          { $set: { "followedFunctions.$[elem].lastUpdate": now } },
-          {
-            arrayFilters: [
+        const updateOperations = [...task.updatedRecordsMap.entries()].map(
+          async ([functionTag, records]) => {
+            const latestDate = getLatestSourceDate(records);
+            if (latestDate == null) return;
+
+            await User.updateOne(
               {
-                "elem.functionTag": { $in: [...task.updatedRecordsMap.keys()] }
-              }
-            ]
+                _id: task.userId,
+                "followedFunctions.functionTag": functionTag
+              },
+              { $set: { "followedFunctions.$.lastUpdate": latestDate } }
+            );
           }
         );
+
+        await Promise.all(updateOperations);
       }
     }
   );
