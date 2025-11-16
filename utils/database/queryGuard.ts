@@ -1,5 +1,7 @@
 type PlainRecord = Record<string, unknown>;
 
+const CONTROL_CHARS = /[\u0000-\u001F\u007F-\u009F]/g;
+
 const FILTER_OPERATORS = new Set<string>([
   "$and",
   "$or",
@@ -58,6 +60,25 @@ const isPlainObject = (value: unknown): value is PlainRecord => {
   return Object.getPrototypeOf(value) === Object.prototype;
 };
 
+const sanitizeValue = (value: unknown): unknown => {
+  if (Array.isArray(value)) {
+    return value.map((entry) => sanitizeValue(entry));
+  }
+
+  if (isPlainObject(value)) {
+    return Object.entries(value).reduce<PlainRecord>((acc, [key, nested]) => {
+      acc[key] = sanitizeValue(nested);
+      return acc;
+    }, {});
+  }
+
+  if (typeof value === "string") {
+    return value.normalize("NFKC").replace(CONTROL_CHARS, "");
+  }
+
+  return value;
+};
+
 const assertAllowedOperators = (
   value: unknown,
   allowedOperators: Set<string>,
@@ -75,6 +96,9 @@ const assertAllowedOperators = (
   }
 
   for (const [key, nested] of Object.entries(value)) {
+    if (key === "__proto__" || key === "constructor" || key === "prototype") {
+      throw new Error(`Unsafe property name "${key}" detected at ${path}`);
+    }
     if (key.startsWith("$") && !allowedOperators.has(key)) {
       throw new Error(`Disallowed MongoDB operator "${key}" detected at ${path}`);
     }
@@ -83,25 +107,29 @@ const assertAllowedOperators = (
 };
 
 export const guardFilter = <T extends PlainRecord | unknown>(filter: T): T => {
-  assertAllowedOperators(filter, FILTER_OPERATORS, "filter");
-  return filter;
+  const sanitizedFilter = sanitizeValue(filter) as T;
+  assertAllowedOperators(sanitizedFilter, FILTER_OPERATORS, "filter");
+  return sanitizedFilter;
 };
 
 export const guardUpdate = <T extends PlainRecord | unknown>(update: T): T => {
-  assertAllowedOperators(update, DEFAULT_ALLOWED_KEYS, "update");
-  return update;
+  const sanitizedUpdate = sanitizeValue(update) as T;
+  assertAllowedOperators(sanitizedUpdate, DEFAULT_ALLOWED_KEYS, "update");
+  return sanitizedUpdate;
 };
 
 export const guardPipeline = <T extends unknown[]>(pipeline: T): T => {
-  pipeline.forEach((stage, index) =>
+  const sanitizedPipeline = sanitizeValue(pipeline) as T;
+  sanitizedPipeline.forEach((stage, index) =>
     assertAllowedOperators(stage, DEFAULT_ALLOWED_KEYS, `pipeline[${index}]`)
   );
-  return pipeline;
+  return sanitizedPipeline;
 };
 
 export const guardAggregationStage = <T>(stage: T): T => {
-  assertAllowedOperators(stage, DEFAULT_ALLOWED_KEYS, "pipelineStage");
-  return stage;
+  const sanitizedStage = sanitizeValue(stage) as T;
+  assertAllowedOperators(sanitizedStage, DEFAULT_ALLOWED_KEYS, "pipelineStage");
+  return sanitizedStage;
 };
 
 export const allowedFilterOperators = FILTER_OPERATORS;
