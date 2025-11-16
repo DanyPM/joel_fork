@@ -2,6 +2,7 @@ import User from "../models/User.ts";
 import { ISession } from "../types.ts";
 import { askFollowUpQuestion } from "../entities/FollowUpManager.ts";
 import { KEYBOARD_KEYS } from "../entities/Keyboard.ts";
+import { guardFilter } from "../utils/database/queryGuard.ts";
 
 const DELETE_PROFILE_CONFIRMATION_PROMPT =
   "*Vous êtes sur le point de supprimer votre profil JOÉL*, comprenant l'ensemble de vos contacts, fonctions et organisations suivis.\n" +
@@ -42,9 +43,11 @@ async function handleDeleteProfileAnswer(
   }
 
   if (trimmedAnswer === "SUPPRIMER MON COMPTE") {
-    await User.deleteOne({
-      _id: session.user._id
-    });
+    await User.deleteOne(
+      guardFilter({
+        _id: session.user._id
+      })
+    );
     session.user = null;
     await session.sendMessage(
       `🗑 Votre profil a bien été supprimé ! 👋\\splitUn profil vierge sera créé lors de l'ajout du prochain suivi ⚠️`

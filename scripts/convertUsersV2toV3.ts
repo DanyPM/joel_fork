@@ -2,6 +2,7 @@ import "dotenv/config";
 import { mongodbConnect } from "../db.ts";
 import User from "../models/User.ts";
 import { Types } from "mongoose";
+import { guardFilter, guardUpdate } from "../utils/database/queryGuard.ts";
 
 interface oldMiniUser {
   _id: Types.ObjectId;
@@ -12,7 +13,7 @@ await (async function () {
   await mongodbConnect();
 
   const users = (await User.collection
-    .find({ chatId: { $exists: true } })
+    .find(guardFilter({ chatId: { $exists: true } }))
     .toArray()) as oldMiniUser[];
 
   let updatedCount = 0;
@@ -21,8 +22,8 @@ await (async function () {
     const chatId = user.chatId;
 
     await User.collection.updateOne(
-      { _id: user._id },
-      { $set: { chatId: String(chatId), schemaVersion: 3 } }
+      guardFilter({ _id: user._id }),
+      guardUpdate({ $set: { chatId: String(chatId), schemaVersion: 3 } })
     );
     updatedCount += 1;
   }

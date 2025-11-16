@@ -23,6 +23,7 @@ import { markdown2WHMarkdown, splitText } from "../utils/text.utils.ts";
 import { Keyboard, KEYBOARD_KEYS, KeyboardKey } from "./Keyboard.ts";
 import { MAIN_MENU_MESSAGE } from "../commands/default.ts";
 import Umami from "../utils/umami.ts";
+import { guardFilter, guardUpdate } from "../utils/database/queryGuard.ts";
 
 export const WHATSAPP_MESSAGE_CHAR_LIMIT = 900;
 const WHATSAPP_COOL_DOWN_DELAY_SECONDS = 6; // 1 message every 6 seconds for the same user, but we'll take 1 here
@@ -288,8 +289,8 @@ export async function sendWhatsAppMessage(
               messageApp: "WhatsApp"
             });
             await User.updateOne(
-              { messageApp: "WhatsApp", chatId: userPhoneIdStr },
-              { $set: { status: "blocked" } }
+              guardFilter({ messageApp: "WhatsApp", chatId: userPhoneIdStr }),
+              guardUpdate({ $set: { status: "blocked" } })
             );
             break;
           case 131026: // user not on WhatsApp
@@ -298,10 +299,12 @@ export async function sendWhatsAppMessage(
               event: "/user-deactivated",
               messageApp: "WhatsApp"
             });
-            await User.deleteOne({
-              messageApp: "WhatsApp",
-              chatId: userPhoneIdStr
-            });
+            await User.deleteOne(
+              guardFilter({
+                messageApp: "WhatsApp",
+                chatId: userPhoneIdStr
+              })
+            );
             break;
           default:
             console.log(resp.error);

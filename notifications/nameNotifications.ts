@@ -19,6 +19,7 @@ import {
   dispatchTasksToMessageApps
 } from "./notificationDispatch.ts";
 import { getSplitTextMessageSize } from "../utils/text.utils.ts";
+import { guardFilter, guardUpdate } from "../utils/database/queryGuard.ts";
 
 const DEFAULT_GROUP_SEPARATOR = "\n====================\n\n";
 
@@ -28,11 +29,11 @@ export async function notifyNameMentionUpdates(
   messageAppsOptions: ExternalMessageOptions
 ) {
   const userFollowingNames: IUser[] = await User.find(
-    {
+    guardFilter({
       "followedNames.0": { $exists: true },
       status: "active",
       messageApp: { $in: enabledApps }
-    },
+    }),
     {
       _id: 1,
       messageApp: 1,
@@ -141,8 +142,8 @@ export async function notifyNameMentionUpdates(
     );
 
     await User.updateOne(
-      { _id: user._id },
-      {
+      guardFilter({ _id: user._id }),
+      guardUpdate({
         $pull: {
           followedNames: {
             $in: [...task.updatedRecordsMap.keys()]
@@ -156,7 +157,7 @@ export async function notifyNameMentionUpdates(
             }))
           }
         }
-      }
+      })
     );
   });
 }

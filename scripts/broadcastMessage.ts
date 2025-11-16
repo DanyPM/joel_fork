@@ -5,6 +5,7 @@ import { MessageApp } from "../types.ts";
 import { ExternalMessageOptions, sendMessage } from "../entities/Session.ts";
 import umami from "../utils/umami.ts";
 import { loadAllMessageApps } from "../utils/loadAllMessageApps.ts";
+import { guardFilter } from "../utils/database/queryGuard.ts";
 
 export interface BroadcastMessageOptions {
   includeBlockedUsers?: boolean;
@@ -28,11 +29,13 @@ export async function broadcastMessage(
   }
   const { messageApps, messageAppOptions } = await loadAllMessageApps();
 
+  const recipientsFilter = guardFilter({
+    messageApp: { $in: messageApps },
+    ...(options?.includeBlockedUsers ? {} : { status: "active" })
+  });
+
   const recipients = await User.find(
-    {
-      messageApp: { $in: messageApps },
-      ...(options?.includeBlockedUsers ? {} : { status: "active" })
-    },
+    recipientsFilter,
     { _id: 0, chatId: 1, messageApp: 1 }
   ).lean();
 

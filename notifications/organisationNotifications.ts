@@ -23,6 +23,7 @@ import {
   SeparatorSelector
 } from "./grouping.ts";
 import { getSplitTextMessageSize } from "../utils/text.utils.ts";
+import { guardFilter, guardUpdate } from "../utils/database/queryGuard.ts";
 
 const DEFAULT_GROUP_SEPARATOR = "====================\n\n";
 const DEFAULT_SUBGROUP_SEPARATOR = "\n--------------------\n\n";
@@ -60,13 +61,15 @@ export async function notifyOrganisationsUpdates(
   );
   if (updatedOrgsWikidataIdSet.size === 0) return;
 
-  const updatedOrgsInDb: IOrganisation[] = await Organisation.find({
-    wikidataId: { $in: [...updatedOrgsWikidataIdSet] }
-  }).lean();
+  const updatedOrgsInDb: IOrganisation[] = await Organisation.find(
+    guardFilter({
+      wikidataId: { $in: [...updatedOrgsWikidataIdSet] }
+    })
+  ).lean();
   if (updatedOrgsInDb.length === 0) return;
 
   const usersFollowingOrganisations: IUser[] = await User.find(
-    {
+    guardFilter({
       followedOrganisations: {
         $exists: true,
         $not: { $size: 0 },
@@ -78,7 +81,7 @@ export async function notifyOrganisationsUpdates(
       },
       status: "active",
       messageApp: { $in: enabledApps }
-    },
+    }),
     {
       _id: 1,
       chatId: 1,
@@ -172,13 +175,15 @@ export async function notifyOrganisationsUpdates(
 
       if (messageSent) {
         await User.updateOne(
-          {
+          guardFilter({
             _id: task.userId,
             "followedOrganisations.wikidataId": {
               $in: [...task.updatedRecordsMap.keys()]
             }
-          },
-          { $set: { "followedOrganisations.$[elem].lastUpdate": now } },
+          }),
+          guardUpdate({
+            $set: { "followedOrganisations.$[elem].lastUpdate": now }
+          }),
           {
             arrayFilters: [
               {

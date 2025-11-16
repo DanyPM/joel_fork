@@ -20,6 +20,7 @@ import {
   dispatchTasksToMessageApps
 } from "./notificationDispatch.ts";
 import { getSplitTextMessageSize } from "../utils/text.utils.ts";
+import { guardFilter, guardUpdate } from "../utils/database/queryGuard.ts";
 
 const DEFAULT_GROUP_SEPARATOR = "\n====================\n\n";
 
@@ -52,15 +53,17 @@ export async function notifyPeopleUpdates(
     nom: { $in: arr.map((a) => a.nom) }
   }));
 
-  const updatedPeopleList: IPeople[] = await People.find({
-    $or: filtersbyPrenom
-  })
+  const updatedPeopleList: IPeople[] = await People.find(
+    guardFilter({
+      $or: filtersbyPrenom
+    })
+  )
     .collation({ locale: "fr", strength: 2 })
     .lean();
   if (updatedPeopleList.length === 0) return;
 
   const usersFollowingPeople: IUser[] = await User.find(
-    {
+    guardFilter({
       followedPeople: {
         $elemMatch: {
           peopleId: {
@@ -70,7 +73,7 @@ export async function notifyPeopleUpdates(
       },
       status: "active",
       messageApp: { $in: enabledApps }
-    },
+    }),
     {
       _id: 1,
       messageApp: 1,
@@ -179,13 +182,15 @@ export async function notifyPeopleUpdates(
         }, []);
 
       await User.updateOne(
-        {
+        guardFilter({
           _id: task.userId,
           "followedPeople.peopleId": {
             $in: updatedRecordsPeopleId
           }
-        },
-        { $set: { "followedPeople.$[elem].lastUpdate": now } },
+        }),
+        guardUpdate({
+          $set: { "followedPeople.$[elem].lastUpdate": now }
+        }),
         {
           arrayFilters: [
             {

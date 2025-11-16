@@ -6,27 +6,27 @@ import { callJORFSearchPeople } from "../utils/JORFSearch.utils.ts";
 import { dateTOJORFFormat, JORFtoDate } from "../utils/date.utils.ts";
 import fs from "node:fs";
 import { convertToCSV } from "../utils/text.utils.ts";
-
-const MONGODB_URI = process.env.MONGODB_URI;
-if (!MONGODB_URI) {
-  throw new Error("MONGODB_URI is not defined");
-}
+import { mongodbConnect } from "../db.ts";
+import { guardFilter } from "../utils/database/queryGuard.ts";
 
 await (async () => {
-  await mongoose.connect(MONGODB_URI).then(async () => {
-    const mdb = mongoose.connection.db;
-    if (!mdb) {
-      throw new Error("MongoDB connection failed");
-    }
+  await mongodbConnect();
 
-    const allPeople = (await mdb
-      .collection("peoples")
-      .find({})
-      .toArray()) as IPeople[];
+  const mdb = mongoose.connection.db;
+  if (!mdb) {
+    throw new Error("MongoDB connection failed");
+  }
 
-    const allUsersFollowingPeople: IUser[] = await User.find({
+  const allPeople = (await mdb
+    .collection("peoples")
+    .find(guardFilter({}))
+    .toArray()) as IPeople[];
+
+  const allUsersFollowingPeople: IUser[] = await User.find(
+    guardFilter({
       "followedPeople.0": { $exists: true }
-    });
+    })
+  );
 
     const backlogTab: {
       peopleName: string;
@@ -123,10 +123,9 @@ await (async () => {
       })) as never[]
     );
 
-    if (backlog_csv !== null) {
-      fs.writeFileSync("backlog.csv", backlog_csv, "utf8");
-    }
-  });
+  if (backlog_csv !== null) {
+    fs.writeFileSync("backlog.csv", backlog_csv, "utf8");
+  }
 
   process.exit(0);
 })();

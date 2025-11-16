@@ -8,6 +8,7 @@ import {
 } from "../utils/JORFSearch.utils.ts";
 import { Keyboard, KEYBOARD_KEYS } from "../entities/Keyboard.ts";
 import { askFollowUpQuestion } from "../entities/FollowUpManager.ts";
+import { guardFilter } from "../utils/database/queryGuard.ts";
 
 const isOrganisationAlreadyFollowed = (
   user: IUser,
@@ -332,9 +333,11 @@ export const followOrganisationsFromWikidataIdStr = async (
 
     const orgResults: IOrganisation[] = [];
 
-    const orgsInDb: IOrganisation[] = await Organisation.find({
-      wikidataId: { $in: selectedWikiDataIds }
-    }).lean();
+    const orgsInDb: IOrganisation[] = await Organisation.find(
+      guardFilter({
+        wikidataId: { $in: selectedWikiDataIds }
+      })
+    ).lean();
     for (const id of selectedWikiDataIds) {
       const orgFromDb: IOrganisation | undefined = orgsInDb.find(
         (o) => o.wikidataId === id

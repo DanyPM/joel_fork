@@ -14,6 +14,7 @@ import { startDailyNotificationJobs } from "../notifications/notificationSchedul
 import User from "../models/User.ts";
 import { IUser } from "../types";
 import { KEYBOARD_KEYS } from "../entities/Keyboard.ts";
+import { guardFilter, guardUpdate } from "../utils/database/queryGuard.ts";
 const { MATRIX_HOME_URL, MATRIX_BOT_TOKEN, MATRIX_BOT_TYPE } = process.env;
 if (
   MATRIX_HOME_URL == undefined ||
@@ -171,16 +172,18 @@ function handleCommand(roomId: string, event: MatrixRoomEvent) {
 
       case "m.room.member": {
         if (event.content.membership === "leave") {
-          const user: IUser | null = await User.findOne({
-            messageApp: matrixApp,
-            roomId: roomId,
-            chatId: event.sender
-          });
+          const user: IUser | null = await User.findOne(
+            guardFilter({
+              messageApp: matrixApp,
+              roomId: roomId,
+              chatId: event.sender
+            })
+          );
           if (user != null) {
             // If a user has left the room, mark him as blocked
             await User.updateOne(
-              { _id: user._id },
-              { $set: { status: "active" }, $unset: { roomId: 1 } },
+              guardFilter({ _id: user._id }),
+              guardUpdate({ $set: { status: "active" }, $unset: { roomId: 1 } }),
               { runValidators: true }
             );
             await umami.log({
@@ -205,15 +208,19 @@ function handleCommand(roomId: string, event: MatrixRoomEvent) {
               return;
             } else {
               // only 1 other person in the room
-              const previousUser: IUser | null = await User.findOne({
-                messageApp: matrixApp,
-                chatId: event.sender
-              });
+              const previousUser: IUser | null = await User.findOne(
+                guardFilter({
+                  messageApp: matrixApp,
+                  chatId: event.sender
+                })
+              );
               if (previousUser != null) {
                 // If a user has left the room, mark him as blocked
                 await User.updateOne(
-                  { _id: previousUser._id },
-                  { $set: { status: "active", roomId: roomId } }
+                  guardFilter({ _id: previousUser._id }),
+                  guardUpdate({
+                    $set: { status: "active", roomId: roomId }
+                  })
                 );
                 await umami.log({
                   event: "/user-unblocked-joel",

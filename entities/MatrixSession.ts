@@ -15,6 +15,7 @@ import {
 import { MatrixClient, MatrixError } from "matrix-bot-sdk";
 import { Keyboard, KEYBOARD_KEYS, KeyboardKey } from "./Keyboard.ts";
 import Umami from "../utils/umami.ts";
+import { guardFilter, guardUpdate } from "../utils/database/queryGuard.ts";
 
 export const MATRIX_MESSAGE_CHAR_LIMIT = 5000;
 const MATRIX_COOL_DOWN_DELAY_SECONDS = 1;
@@ -136,8 +137,11 @@ export async function sendMatrixMessage(
     if (userInfo.roomId && !joinedRoomIds.has(userInfo.roomId)) {
       try {
         await User.updateOne(
-          { messageApp: client.messageApp, chatId: userInfo.chatId },
-          { $unset: { roomId: 1 } }
+          guardFilter({
+            messageApp: client.messageApp,
+            chatId: userInfo.chatId
+          }),
+          guardUpdate({ $unset: { roomId: 1 } })
         );
       } catch (updateError) {
         console.log(
@@ -159,8 +163,11 @@ export async function sendMatrixMessage(
       if (dmRoomId) {
         try {
           await User.updateOne(
-            { messageApp: client.messageApp, chatId: userInfo.chatId },
-            { $set: { roomId: dmRoomId } }
+            guardFilter({
+              messageApp: client.messageApp,
+              chatId: userInfo.chatId
+            }),
+            guardUpdate({ $set: { roomId: dmRoomId } })
           );
         } catch (updateError) {
           console.log(
@@ -176,10 +183,12 @@ export async function sendMatrixMessage(
       console.log(
         `${userInfo.messageApp}: Could not find DM room for user ${userInfo.chatId}`
       );
-      await User.updateOne({
-        messageApp: userInfo.messageApp,
-        chatId: userInfo.chatId
-      });
+      await User.updateOne(
+        guardFilter({
+          messageApp: userInfo.messageApp,
+          chatId: userInfo.chatId
+        })
+      );
       return false;
     }
     let promptId = "";
@@ -240,8 +249,11 @@ export async function sendMatrixMessage(
           messageApp: client.messageApp
         });
         await User.updateOne(
-          { messageApp: client.messageApp, chatId: userInfo.chatId },
-          { $set: { status: "blocked" } }
+          guardFilter({
+            messageApp: client.messageApp,
+            chatId: userInfo.chatId
+          }),
+          guardUpdate({ $set: { status: "blocked" } })
         );
         break;
       default:

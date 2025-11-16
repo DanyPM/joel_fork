@@ -11,6 +11,7 @@ import { JORFSearchItem } from "../entities/JORFSearchResponse.ts";
 import { removeSpecialCharacters } from "../utils/text.utils.ts";
 import { Keyboard, KEYBOARD_KEYS } from "../entities/Keyboard.ts";
 import { askFollowUpQuestion } from "../entities/FollowUpManager.ts";
+import { guardFilter } from "../utils/database/queryGuard.ts";
 
 const isPersonAlreadyFollowed = (
   person: IPeople,
@@ -193,14 +194,18 @@ export async function searchPersonHistory(
     }
     let numberFollowers: number | undefined;
 
-    peopleFromDB ??= await People.findOne({
-      nom: JORFRes_data[0].nom,
-      prenom: JORFRes_data[0].prenom
-    });
+    peopleFromDB ??= await People.findOne(
+      guardFilter({
+        nom: JORFRes_data[0].nom,
+        prenom: JORFRes_data[0].prenom
+      })
+    );
     if (peopleFromDB != null) {
-      numberFollowers = await User.countDocuments({
-        followedPeople: { $elemMatch: { peopleId: peopleFromDB._id } }
-      });
+      numberFollowers = await User.countDocuments(
+        guardFilter({
+          followedPeople: { $elemMatch: { peopleId: peopleFromDB._id } }
+        })
+      );
     }
 
     let text = "";
@@ -228,10 +233,12 @@ export async function searchPersonHistory(
     if (session.user == null) {
       isUserFollowingPerson = false;
     } else {
-      const people: IPeople | null = await People.findOne({
-        nom: JORFRes_data[0].nom,
-        prenom: JORFRes_data[0].prenom
-      })
+      const people: IPeople | null = await People.findOne(
+        guardFilter({
+          nom: JORFRes_data[0].nom,
+          prenom: JORFRes_data[0].prenom
+        })
+      )
         .collation({ locale: "fr", strength: 2 }) // case-insensitive, no regex
         .lean();
 

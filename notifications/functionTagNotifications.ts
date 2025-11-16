@@ -25,6 +25,7 @@ import {
   groupRecordsBy
 } from "./grouping.ts";
 import { getSplitTextMessageSize } from "../utils/text.utils.ts";
+import { guardFilter, guardUpdate } from "../utils/database/queryGuard.ts";
 
 const DEFAULT_GROUP_SEPARATOR = "====================\n\n";
 const DEFAULT_SUBGROUP_SEPARATOR = "\n--------------------\n\n";
@@ -95,7 +96,7 @@ export async function notifyFunctionTagsUpdates(
   const updatedTagSet = new Set<FunctionTags>(updatedTagMap.keys());
 
   const usersFollowingTags: IUser[] = await User.find(
-    {
+    guardFilter({
       followedFunctions: {
         $exists: true,
         $not: { $size: 0 },
@@ -105,7 +106,7 @@ export async function notifyFunctionTagsUpdates(
       },
       status: "active",
       messageApp: { $in: enabledApps }
-    },
+    }),
     {
       _id: 1,
       messageApp: 1,
@@ -172,13 +173,15 @@ export async function notifyFunctionTagsUpdates(
 
       if (messageSent) {
         await User.updateOne(
-          {
+          guardFilter({
             _id: task.userId,
             "followedFunctions.functionTag": {
               $in: [...task.updatedRecordsMap.keys()]
             }
-          },
-          { $set: { "followedFunctions.$[elem].lastUpdate": now } },
+          }),
+          guardUpdate({
+            $set: { "followedFunctions.$[elem].lastUpdate": now }
+          }),
           {
             arrayFilters: [
               {

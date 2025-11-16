@@ -15,6 +15,7 @@ import {
 } from "../utils/JORFSearch.utils.ts";
 import { Keyboard, KEYBOARD_KEYS } from "../entities/Keyboard.ts";
 import { askFollowUpQuestion } from "../entities/FollowUpManager.ts";
+import { guardFilter } from "../utils/database/queryGuard.ts";
 
 export interface UserFollows {
   functions: FunctionTags[];
@@ -131,9 +132,11 @@ export async function getAllUserFollowsOrdered(
 
   let followedOrganisations: IOrganisation[] = [];
   if (user.followedOrganisations.length > 0)
-    followedOrganisations = await Organisation.find({
-      wikidataId: { $in: user.followedOrganisations.map((o) => o.wikidataId) }
-    }).lean();
+    followedOrganisations = await Organisation.find(
+      guardFilter({
+        wikidataId: { $in: user.followedOrganisations.map((o) => o.wikidataId) }
+      })
+    ).lean();
 
   followedOrganisations.sort((a, b) =>
     a.nom.toUpperCase().localeCompare(b.nom.toUpperCase())
@@ -141,9 +144,11 @@ export async function getAllUserFollowsOrdered(
 
   let followedPeoples: IPeople[] = [];
   if (user.followedPeople.length > 0)
-    followedPeoples = await People.find({
-      _id: { $in: user.followedPeople.map((p) => p.peopleId) }
-    }).lean();
+    followedPeoples = await People.find(
+      guardFilter({
+        _id: { $in: user.followedPeople.map((p) => p.peopleId) }
+      })
+    ).lean();
 
   const followedPeopleTab: {
     nomPrenom: string;
@@ -473,7 +478,7 @@ export const unfollowFromStr = async (
 
     // Delete the user if it doesn't follow anything any more
     if (session.user.followsNothing()) {
-      await User.deleteOne({ _id: session.user._id });
+      await User.deleteOne(guardFilter({ _id: session.user._id }));
       await session.log({ event: "/user-deletion-no-follow" });
     }
 

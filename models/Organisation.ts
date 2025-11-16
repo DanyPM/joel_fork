@@ -2,6 +2,7 @@ import { Schema as _Schema, model } from "mongoose";
 const Schema = _Schema;
 import umami from "../utils/umami.ts";
 import { IOrganisation, OrganisationModel, WikidataId } from "../types.ts";
+import { guardFilter } from "../utils/database/queryGuard.ts";
 
 const OrganisationSchema = new Schema<IOrganisation, OrganisationModel>(
   {
@@ -26,9 +27,11 @@ OrganisationSchema.static(
     args: { nom: string; wikidataId: WikidataId },
     lean = true
   ): Promise<IOrganisation> {
-    const query = this.findOne({
-      wikidataId: args.wikidataId.toUpperCase()
-    });
+    const query = this.findOne(
+      guardFilter({
+        wikidataId: args.wikidataId.toUpperCase()
+      })
+    );
     if (lean) query.lean();
 
     let organisation: IOrganisation | null = await query.exec();

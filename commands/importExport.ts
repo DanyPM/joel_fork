@@ -11,6 +11,7 @@ import {
 } from "./list.ts";
 import { cleanPeopleName } from "../utils/JORFSearch.utils.ts";
 import { KEYBOARD_KEYS } from "../entities/Keyboard.ts";
+import { guardFilter } from "../utils/database/queryGuard.ts";
 
 const EXPORT_CODE_VALIDITY_MS = 4 * 60 * 60 * 1000; // 4 hours
 
@@ -83,9 +84,11 @@ async function handleImporterCode(
     return true;
   }
 
-  const sourceUser: IUser | null = await User.findOne({
-    "transferData.code": code
-  });
+  const sourceUser: IUser | null = await User.findOne(
+    guardFilter({
+      "transferData.code": code
+    })
+  );
 
   if (
     sourceUser?.transferData == null ||
@@ -160,9 +163,11 @@ async function handleImporterConfirmation(
       return true;
     }
 
-    const sourceUser: IUser | null = await User.findOne({
-      _id: context.sourceUserId
-    });
+    const sourceUser: IUser | null = await User.findOne(
+      guardFilter({
+        _id: context.sourceUserId
+      })
+    );
 
     if (
       sourceUser?.transferData == null ||

@@ -12,6 +12,7 @@ import axios, { AxiosError, isAxiosError } from "axios";
 import { Keyboard, KEYBOARD_KEYS } from "./Keyboard.ts";
 import { ExtraReplyMessage } from "telegraf/typings/telegram-types";
 import Umami from "../utils/umami.ts";
+import { guardFilter, guardUpdate } from "../utils/database/queryGuard.ts";
 export const TELEGRAM_MESSAGE_CHAR_LIMIT = 3000;
 const TELEGRAM_COOL_DOWN_DELAY_SECONDS = 1; // 1 message per second for the same user
 
@@ -224,8 +225,8 @@ export async function sendTelegramMessage(
             messageApp: "Telegram"
           });
           await User.updateOne(
-            { messageApp: "Telegram", chatId: chatId },
-            { $set: { status: "blocked" } }
+            guardFilter({ messageApp: "Telegram", chatId: chatId }),
+            guardUpdate({ $set: { status: "blocked" } })
           );
           break;
         case "Forbidden: user is deactivated":
@@ -233,10 +234,12 @@ export async function sendTelegramMessage(
             event: "/user-deactivated",
             messageApp: "Telegram"
           });
-          await User.deleteOne({
-            messageApp: "Telegram",
-            chatId: chatId
-          });
+          await User.deleteOne(
+            guardFilter({
+              messageApp: "Telegram",
+              chatId: chatId
+            })
+          );
           break;
         case "Too many requests":
           await umami.log({

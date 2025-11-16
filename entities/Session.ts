@@ -10,6 +10,7 @@ import { SignalCli } from "signal-sdk";
 import { MatrixClient } from "matrix-bot-sdk";
 import { Keyboard } from "./Keyboard.ts";
 import { sendMatrixMessage } from "./MatrixSession.ts";
+import { guardFilter, guardUpdate } from "../utils/database/queryGuard.ts";
 
 export interface ExternalMessageOptions {
   matrixClient?: MatrixClient;
@@ -24,23 +25,29 @@ export interface ExternalMessageOptions {
 export async function loadUser(session: ISession): Promise<IUser | null> {
   if (session.user != null) return null;
 
-  const user: IUser | null = await User.findOne({
-    messageApp: session.messageApp,
-    chatId: session.chatId
-  });
-
-  if (user == null) {
-    const legacyUser = (await User.collection.findOne({
+  const user: IUser | null = await User.findOne(
+    guardFilter({
       messageApp: session.messageApp,
       chatId: session.chatId
-    })) as IRawUser | null;
+    })
+  );
+
+  if (user == null) {
+    const legacyUser = (await User.collection.findOne(
+      guardFilter({
+        messageApp: session.messageApp,
+        chatId: session.chatId
+      })
+    )) as IRawUser | null;
     if (legacyUser !== null) {
       await migrateUser(legacyUser);
       // now return the migrated user
-      return User.findOne({
-        messageApp: session.messageApp,
-        chatId: session.chatId
-      });
+      return User.findOne(
+        guardFilter({
+          messageApp: session.messageApp,
+          chatId: session.chatId
+        })
+      );
     }
   }
   return user;
@@ -54,8 +61,13 @@ export async function migrateUser(rawUser: IRawUser): Promise<void> {
 
     try {
       await User.collection.updateOne(
-        { messageApp: legacyUser.messageApp, chatId: legacyUser.chatId },
-        { $set: { schemaVersion: 3, chatId: legacyUser.chatId.toString() } }
+        guardFilter({
+          messageApp: legacyUser.messageApp,
+          chatId: legacyUser.chatId
+        }),
+        guardUpdate({
+          $set: { schemaVersion: 3, chatId: legacyUser.chatId.toString() }
+        })
       );
     } catch (err) {
       console.error("Migration failed:", err);
@@ -71,8 +83,10 @@ export async function recordSuccessfulDelivery(
   chatId: string
 ): Promise<void> {
   await User.updateOne(
-    { messageApp, chatId },
-    { $set: { lastMessageReceivedAt: new Date(), status: "active" } }
+    guardFilter({ messageApp, chatId }),
+    guardUpdate({
+      $set: { lastMessageReceivedAt: new Date(), status: "active" }
+    })
   );
 }
 
