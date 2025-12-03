@@ -335,6 +335,55 @@ const REFERENCE_PROMPT_KEYBOARD: Keyboard = [
 const REFERENCE_CONFIRM_TEXT =
   "Voulez-vous ajouter ces personnes à vos suivis ? (répondez *oui* ou *non*)\n\n⚠️ Attention : les retirer peut ensuite prendre du temps.";
 
+async function processReferenceInput(
+  session: ISession,
+  referenceInput: string,
+  options: { promptOnError: boolean }
+): Promise<boolean> {
+  const reference = extractJORFTextId(referenceInput).toUpperCase();
+  await session.sendTypingAction();
+
+  const JORFResult = await callJORFSearchReference(
+    reference,
+    session.messageApp
+  );
+  if (JORFResult == null) {
+    await session.sendMessage(
+      "Une erreur JORFSearch indépendante de JOEL est survenue. Veuillez réessayer ultérieurement."
+    );
+    return true;
+  }
+  if (JORFResult.length === 0) {
+    await session.sendMessage(
+      `La référence n'a pas été reconnue.👎\nVeuillez essayer de nouveau la commande.`,
+      { keyboard: REFERENCE_PROMPT_KEYBOARD }
+    );
+    if (options.promptOnError) await askReferenceQuestion(session);
+    return true;
+  }
+
+  JORFResult.sort((a, b) => {
+    if (a.nom.toUpperCase() < b.nom.toUpperCase()) return -1;
+    if (a.nom.toUpperCase() > b.nom.toUpperCase()) return 1;
+    return 0;
+  });
+
+  const contacts = JORFResult.map((contact) => {
+    return `${contact.nom} ${contact.prenom}`;
+  });
+
+  let message = `Le texte [${reference}](${getJORFTextLink(reference)}) mentionne *${String(JORFResult.length)}* personnes:\n`;
+  message += contacts.join("\n");
+
+  await session.sendMessage(message, { separateMenuMessage: true });
+
+  await askFollowUpQuestion(session, REFERENCE_CONFIRM_TEXT, handleReferenceConfirmation, {
+    context: { reference, results: JORFResult },
+    messageOptions: { forceNoKeyboard: true }
+  });
+  return true;
+}
+
 async function askReferenceQuestion(session: ISession): Promise<void> {
   await askFollowUpQuestion(
     session,
@@ -374,53 +423,7 @@ async function handleReferenceAnswer(
     return false;
   }
 
-  const reference = extractJORFTextId(trimmedAnswer).toUpperCase();
-  await session.sendTypingAction();
-
-  const JORFResult = await callJORFSearchReference(
-    reference,
-    session.messageApp
-  );
-  if (JORFResult == null) {
-    await session.sendMessage(
-      "Une erreur JORFSearch indépendante de JOEL est survenue. Veuillez réessayer ultérieurement."
-    );
-    return true;
-  }
-  if (JORFResult.length === 0) {
-    await session.sendMessage(
-      `La référence n'a pas été reconnue.👎\nVeuillez essayer de nouveau la commande.`,
-      { keyboard: REFERENCE_PROMPT_KEYBOARD }
-    );
-    await askReferenceQuestion(session);
-    return true;
-  }
-
-  JORFResult.sort((a, b) => {
-    if (a.nom.toUpperCase() < b.nom.toUpperCase()) return -1;
-    if (a.nom.toUpperCase() > b.nom.toUpperCase()) return 1;
-    return 0;
-  });
-
-  const contacts = JORFResult.map((contact) => {
-    return `${contact.nom} ${contact.prenom}`;
-  });
-
-  let message = `Le texte [${reference}](${getJORFTextLink(reference)}) mentionne *${String(JORFResult.length)}* personnes:\n`;
-  message += contacts.join("\n");
-
-  await session.sendMessage(message, { separateMenuMessage: true });
-
-  await askFollowUpQuestion(
-    session,
-    REFERENCE_CONFIRM_TEXT,
-    handleReferenceConfirmation,
-    {
-      context: { reference, results: JORFResult },
-      messageOptions: { forceNoKeyboard: true }
-    }
-  );
-  return true;
+  return await processReferenceInput(session, trimmedAnswer, { promptOnError: true });
 }
 
 async function handleReferenceConfirmation(
@@ -489,6 +492,27 @@ export const suivreFromJOReference = async (
   try {
     await session.log({ event: "/follow-reference" });
     await askReferenceQuestion(session);
+  } catch (error) {
+    console.log(error);
+    await session.log({ event: "/console-log" });
+  }
+};
+
+export const followReferenceFromStr = async (
+  session: ISession,
+  msg: string
+): Promise<void> => {
+  try {
+    await session.log({ event: "/follow-reference" });
+
+    const referenceInput = msg.split(" ").slice(1).join(" ");
+
+    if (referenceInput.trim().length === 0) {
+      await askReferenceQuestion(session);
+      return;
+    }
+
+    await processReferenceInput(session, referenceInput, { promptOnError: true });
   } catch (error) {
     console.log(error);
     await session.log({ event: "/console-log" });

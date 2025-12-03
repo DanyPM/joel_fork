@@ -12,7 +12,12 @@ import {
   searchCommand,
   searchPersonHistory
 } from "./search.ts";
-import { enaCommand, promosCommand, suivreFromJOReference } from "./ena.ts";
+import {
+  enaCommand,
+  followReferenceFromStr,
+  promosCommand,
+  suivreFromJOReference
+} from "./ena.ts";
 import { statsCommand } from "./stats.ts";
 import { defaultCommand } from "./default.ts";
 import { startCommand } from "./start.ts";
@@ -104,7 +109,7 @@ export const commands: CommandType[] = [
   {
     regex:
       /^SuivreR|^SuiviR|^Suivre R |^Suivi R |^Suivre R$|^Suivi R$|^Suivre à partir d'une référence JORF\/BO/i,
-    action: suivreFromJOReference
+    action: followReferenceFromStr
   },
   {
     regex: /^SuivreN|^SuiviN/i,

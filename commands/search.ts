@@ -15,6 +15,7 @@ import {
   KEYBOARD_KEYS
 } from "../entities/Keyboard.ts";
 import { askFollowUpQuestion } from "../entities/FollowUpManager.ts";
+import { followReferenceFromStr } from "./ena.ts";
 
 const isPersonAlreadyFollowed = (
   person: IPeople,
@@ -330,14 +331,19 @@ export const followCommand = async (
 
     const msgSplit = msg.split(" ");
 
+    const personName = msgSplit.slice(1).join(" ");
+
+    if (/\d/.test(personName)) {
+      await followReferenceFromStr(session, msg);
+      return;
+    }
+
     if (msgSplit.length < 3) {
       await session.sendMessage(
         "Saisie incorrecte. Veuillez réessayer:\nFormat : *Suivre Prénom Nom*"
       );
       return;
     }
-
-    const personName = msgSplit.slice(1).join(" ");
 
     await session.sendTypingAction();
 
