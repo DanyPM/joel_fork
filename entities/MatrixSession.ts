@@ -136,9 +136,15 @@ export async function sendMatrixMessage(
   const mArr = splitText(message, MATRIX_MESSAGE_CHAR_LIMIT);
   let i = 0;
   try {
-    let joinedRoomIds = await getJoinedRooms(client.matrix);
+    let joinedRoomIds: Set<string> | undefined;
 
-    if (userInfo.roomId && !joinedRoomIds.has(userInfo.roomId)) {
+    if (!userInfo.roomId) {
+      joinedRoomIds = await getJoinedRooms(client.matrix);
+    } else if (joinedRoomsCache?.expiresAt && joinedRoomsCache.expiresAt > Date.now()) {
+      joinedRoomIds = joinedRoomsCache.rooms;
+    }
+
+    if (userInfo.roomId && joinedRoomIds && !joinedRoomIds.has(userInfo.roomId)) {
       joinedRoomIds = await getJoinedRooms(client.matrix, true);
 
       try {
