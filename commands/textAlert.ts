@@ -17,6 +17,8 @@ const TEXT_ALERT_PROMPT =
 
 const TEXT_RESULT_MAX = 5;
 
+export const TEXT_ALERT_FUZZY_THRESHOLD = 0.12;
+
 function findFollowedAlertString(
   user: IUser,
   alertString: string
@@ -341,7 +343,7 @@ async function refreshRecentPublications(): Promise<PublicationPreview[]> {
   publicationsIndex = new Fuse(cachedPublications, {
     keys: ["normalizedTitle"],
     includeScore: true,
-    threshold: 0.1,
+    threshold: TEXT_ALERT_FUZZY_THRESHOLD,
     ignoreLocation: true
   });
 

@@ -17,6 +17,7 @@ import {
   NotificationTask,
   dispatchTasksToMessageApps
 } from "./notificationDispatch.ts";
+import { TEXT_ALERT_FUZZY_THRESHOLD } from "../commands/textAlert.ts";
 
 const DEFAULT_GROUP_SEPARATOR = "\n====================\n\n";
 
@@ -38,7 +39,7 @@ export async function notifyAlertStringUpdates(
 
   const fuse = new Fuse<MetaWithNormalized>(metaWithNormalized, {
     keys: ["normalizedTitle"],
-    threshold: 0.4, // same fuzziness as in your other code
+    threshold: TEXT_ALERT_FUZZY_THRESHOLD,
     ignoreLocation: true // match anywhere in the title
   });
 
@@ -74,9 +75,9 @@ export async function notifyAlertStringUpdates(
       // Search only in today's/new batch (metaWithNormalized)
       const fuseResults = fuse.search(normalizedAlert);
 
-      const updatesForAlert: JORFSearchPublication[] = fuseResults.map(
-        (r) => r.item
-      );
+      const updatesForAlert: JORFSearchPublication[] = fuseResults
+        .map((r) => r.item)
+        .sort((a, b) => b.date_obj.getTime() - a.date_obj.getTime());
 
       const lastUpdate = follow.lastUpdate;
       const dateFilteredUpdates = updatesForAlert.filter((record) => {
