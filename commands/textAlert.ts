@@ -4,21 +4,18 @@ import { ISession, MessageApp, IUser } from "../types.ts";
 import { KEYBOARD_KEYS } from "../entities/Keyboard.ts";
 import { Publication } from "../models/Publication.ts";
 import {
-  fuzzyIncludesNormalized,
   levenshteinDistance,
   normalizeFrenchText
 } from "../utils/text.utils.ts";
 import { getJORFTextLink } from "../utils/JORFSearch.utils.ts";
 import { JORFSearchPublication } from "../entities/JORFSearchResponseMeta.ts";
 import { logError } from "../utils/debugLogger.ts";
+import Fuse from "fuse.js";
 
 const TEXT_ALERT_PROMPT =
   "Quel texte souhaitez-vous rechercher ? Renseignez un mot ou une expression.";
 
 const TEXT_RESULT_MAX = 5;
-
-const twoYearsAgo = new Date();
-twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 2);
 
 function findFollowedAlertString(
   user: IUser,
@@ -85,7 +82,6 @@ async function handleTextAlertAnswer(
   session.sendTypingAction();
 
   const normalizedAnswer = normalizeFrenchText(trimmedAnswer);
-  const normalizedAnswerWords = normalizedAnswer.split(" ").filter(Boolean);
 
   const recentPublications = await getRecentPublications(session.messageApp);
   if (recentPublications == null) {
@@ -95,21 +91,33 @@ async function handleTextAlertAnswer(
     return true;
   }
 
-  const matchingPublications = recentPublications.reduce(
-    (tab: PublicationPreview[], publication) => {
-      if (tab.length >= TEXT_RESULT_MAX) return tab;
-      if (
-        fuzzyIncludesNormalized(
-          publication.normalizedTitle,
-          normalizedAnswer,
-          publication.normalizedTitleWords,
-          normalizedAnswerWords
-        )
-      )
-        tab.push(publication);
-      return tab;
-    },
-    []
+  let matchingPublications: PublicationPreview[];
+
+  if (!publicationsIndex) {
+    // Fallback: simple includes, just in case index not ready
+    matchingPublications = recentPublications.filter((pub) =>
+      pub.normalizedTitle.includes(normalizedAnswer)
+    );
+  } else {
+    const fuseResults = publicationsIndex.search(normalizedAnswer);
+
+    if (fuseResults.length > 100) {
+      await session.sendMessage(
+        "Votre saisie est trop générale (plus de 100 textes correspondants sur les deux dernières années). Merci de préciser votre demande.",
+        { keyboard: [[KEYBOARD_KEYS.MAIN_MENU.key]] }
+      );
+      await askTextAlertQuestion(session);
+      return true;
+    }
+
+    // For display, keep only the top N
+    matchingPublications = fuseResults
+      .slice(0, TEXT_RESULT_MAX)
+      .map((r) => r.item);
+  }
+
+  matchingPublications.sort(
+    (a, b) => b.date_obj.getTime() - a.date_obj.getTime()
   );
 
   if (matchingPublications.length > 100) {
@@ -165,6 +173,8 @@ async function handleTextAlertAnswer(
   if (foundFollow != undefined) {
     text += `Vous suivez une expression proche : « ${foundFollow} ».\n\n`;
   }
+
+  text += "\\split";
 
   text += TEXT_ALERT_CONFIRMATION_PROMPT(trimmedAnswer);
 
@@ -303,6 +313,8 @@ let lastFetchedAt: number | null = null;
 let inflightRefresh: Promise<PublicationPreview[]> | null = null;
 let backgroundRefreshStarted = false;
 
+let publicationsIndex: Fuse<PublicationPreview> | null = null;
+
 async function refreshRecentPublications(): Promise<PublicationPreview[]> {
   const twoYearsAgo = new Date();
   twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 2);
@@ -324,6 +336,15 @@ async function refreshRecentPublications(): Promise<PublicationPreview[]> {
       normalizedTitleWords: normalizedTitle.split(" ").filter(Boolean)
     };
   });
+
+  // Build Fuse index on normalized title
+  publicationsIndex = new Fuse(cachedPublications, {
+    keys: ["normalizedTitle"],
+    includeScore: true,
+    threshold: 0.1,
+    ignoreLocation: true
+  });
+
   lastFetchedAt = Date.now();
 
   return cachedPublications;

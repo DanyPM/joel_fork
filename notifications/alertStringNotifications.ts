@@ -8,7 +8,11 @@ import { IUser, MessageApp } from "../types.ts";
 import User from "../models/User.ts";
 import umami, { UmamiNotificationData } from "../utils/umami.ts";
 import { dateToFrenchString } from "../utils/date.utils.ts";
-import { fuzzyIncludes, getSplitTextMessageSize } from "../utils/text.utils.ts";
+import {
+  normalizeFrenchText,
+  getSplitTextMessageSize
+} from "../utils/text.utils.ts";
+import Fuse from "fuse.js";
 import {
   NotificationTask,
   dispatchTasksToMessageApps
@@ -22,6 +26,21 @@ export async function notifyAlertStringUpdates(
   messageAppsOptions: ExternalMessageOptions
 ) {
   if (metaRecords.length === 0) return;
+
+  type MetaWithNormalized = JORFSearchPublication & { normalizedTitle: string };
+
+  const metaWithNormalized: MetaWithNormalized[] = metaRecords.map(
+    (record) => ({
+      ...record,
+      normalizedTitle: normalizeFrenchText(record.title)
+    })
+  );
+
+  const fuse = new Fuse<MetaWithNormalized>(metaWithNormalized, {
+    keys: ["normalizedTitle"],
+    threshold: 0.4, // same fuzziness as in your other code
+    ignoreLocation: true // match anywhere in the title
+  });
 
   const usersFollowingAlerts: IUser[] = await User.find(
     {
@@ -48,8 +67,15 @@ export async function notifyAlertStringUpdates(
 
     for (const follow of user.followedMeta) {
       if (!follow.alertString) continue;
-      const updatesForAlert = metaRecords.filter((record) =>
-        fuzzyIncludes(record.title, follow.alertString)
+
+      const normalizedAlert = normalizeFrenchText(follow.alertString);
+      if (!normalizedAlert) continue;
+
+      // Search only in today's/new batch (metaWithNormalized)
+      const fuseResults = fuse.search(normalizedAlert);
+
+      const updatesForAlert: JORFSearchPublication[] = fuseResults.map(
+        (r) => r.item
       );
 
       const lastUpdate = follow.lastUpdate;

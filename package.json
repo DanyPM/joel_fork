@@ -18,6 +18,7 @@
     "dotenv": "^17.2.3",
     "emoji-regex": "^10.6.0",
     "express": "^5.2.1",
+    "fuse.js": "^7.1.0",
     "matrix-bot-sdk": "^0.7.1",
     "mongodb": "^6.21.0",
     "mongoose": "^8.20.2",
