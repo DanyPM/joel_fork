@@ -30,7 +30,7 @@ const isPersonAlreadyFollowed = (
   });
 };
 
-const SEARCH_PROMPT_TEXT = `Entrez le nom de la personne à rechercher, ou la référence du texte à parcourir.\\split
+const SEARCH_PROMPT_TEXT = `Entrez le nom de la personne à rechercher (ou plusieurs, une par ligne), ou la référence du texte à parcourir.\\split
 Exemples:
 - *Edouard Philippe*
 - *JORFTEXT000052060473*`;
@@ -58,6 +58,15 @@ async function handleSearchAnswer(
   answer: string
 ): Promise<boolean> {
   const trimmedAnswer = answer.trim();
+
+  const multiSearchNames = trimmedAnswer
+    .split(/\n+/)
+    .map((line) => cleanPeopleName(removeSpecialCharacters(line).trim()))
+    .filter((line) => line.length > 0);
+
+  if (multiSearchNames.length > 1) {
+    return await handleMultiSearch(session, multiSearchNames);
+  }
 
   if (trimmedAnswer.length === 0) {
     await session.sendMessage(
@@ -91,6 +100,198 @@ async function handleSearchAnswer(
   }
 
   await searchPersonHistory(session, "Historique " + trimmedAnswer, "latest");
+
+  return true;
+}
+
+interface MultiSearchContext {
+  toFollowPeople: { prenom: string; nom: string }[];
+  toFollowManual: { nomPrenom: string; display: string }[];
+  alreadyFollowedJO: string[];
+  alreadyFollowedManual: string[];
+}
+
+const MULTI_SEARCH_CONFIRM_KEYBOARD: Keyboard = [
+  [{ text: "✅ Confirmer" }],
+  [{ text: "❌ Annuler" }],
+  [KEYBOARD_KEYS.MAIN_MENU.key]
+];
+
+async function handleMultiSearch(
+  session: ISession,
+  names: string[]
+): Promise<boolean> {
+  const invalidName = names.find((name) => name.split(" ").length < 2);
+  if (invalidName) {
+    await session.sendMessage(
+      "Saisie incorrecte. Veuillez réessayer:\nFormat : *Prénom Nom* (une personne par ligne)",
+      { keyboard: SEARCH_PROMPT_KEYBOARD }
+    );
+    return true;
+  }
+
+  session.user ??= await User.findOrCreate(session);
+
+  const context: MultiSearchContext = {
+    toFollowManual: [],
+    toFollowPeople: [],
+    alreadyFollowedJO: [],
+    alreadyFollowedManual: []
+  };
+
+  for (const name of names) {
+    const splitName = name.split(" ");
+    const prenomNom = splitName.join(" ");
+    const nomPrenom = `${splitName.slice(1).join(" ")} ${splitName[0]}`;
+
+    const searchResults = await callJORFSearchPeople(
+      prenomNom,
+      session.messageApp
+    );
+
+    const isOnJORF = searchResults != null && searchResults.length > 0;
+    let alreadyFollowed = false;
+
+    if (session.user != null) {
+      if (isOnJORF) {
+        const people = await People.findOne({
+          nom: searchResults[0].nom,
+          prenom: searchResults[0].prenom
+        })
+          .collation({ locale: "fr", strength: 2 })
+          .lean();
+
+        if (
+          people != null &&
+          isPersonAlreadyFollowed(people, session.user.followedPeople)
+        ) {
+          context.alreadyFollowedJO.push(
+            `${searchResults[0].prenom} ${searchResults[0].nom}`
+          );
+          alreadyFollowed = true;
+        }
+      }
+
+      if (!alreadyFollowed && session.user.checkFollowedName(nomPrenom)) {
+        context.alreadyFollowedManual.push(
+          isOnJORF
+            ? `${searchResults![0].prenom} ${searchResults![0].nom}`
+            : prenomNom
+        );
+        alreadyFollowed = true;
+      }
+    }
+
+    if (alreadyFollowed) continue;
+
+    if (isOnJORF) {
+      context.toFollowPeople.push({
+        nom: searchResults![0].nom,
+        prenom: searchResults![0].prenom
+      });
+    } else {
+      context.toFollowManual.push({ display: prenomNom, nomPrenom });
+    }
+  }
+
+  const sections: string[] = [];
+
+  const formatSection = (title: string, items: string[]): string => {
+    if (items.length === 0) return `${title}\n- Aucun`;
+    return `${title}\n${items.map((item) => `- ${item}`).join("\n")}`;
+  };
+
+  sections.push(
+    formatSection("Suivis déjà existants", context.alreadyFollowedJO)
+  );
+  sections.push(
+    formatSection(
+      "Noms hors JO déjà suivis (suivi manuel)",
+      context.alreadyFollowedManual
+    )
+  );
+  sections.push(
+    formatSection(
+      "Présents sur JORFSearch à ajouter aux suivis",
+      context.toFollowPeople.map((p) => `${p.prenom} ${p.nom}`)
+    )
+  );
+  sections.push(
+    formatSection(
+      "Pas encore sur JO (suivi manuel proposé)",
+      context.toFollowManual.map((p) => p.display)
+    )
+  );
+
+  const text =
+    "Plusieurs lignes détectées. L'affichage classique est désactivé.\n\n" +
+    sections.join("\n\n") +
+    "\n\nConfirmez-vous l'ajout de ces suivis ?\n⚠️ Cela peut créer des suivis groupés (y compris manuels).";
+
+  await askFollowUpQuestion(session, text, handleMultiSearchFollowUp, {
+    context,
+    messageOptions: { keyboard: MULTI_SEARCH_CONFIRM_KEYBOARD }
+  });
+
+  return true;
+}
+
+async function handleMultiSearchFollowUp(
+  session: ISession,
+  answer: string,
+  context: MultiSearchContext
+): Promise<boolean> {
+  const normalizedAnswer = answer.toLowerCase();
+
+  if (normalizedAnswer.includes("confirmer") || normalizedAnswer.includes("oui")) {
+    session.user ??= await User.findOrCreate(session);
+
+    const added: string[] = [];
+    const manualAdded: string[] = [];
+
+    for (const person of context.toFollowPeople) {
+      const people = await People.findOrCreate({
+        nom: person.nom,
+        prenom: person.prenom
+      });
+      if (await session.user.addFollowedPeople(people)) {
+        added.push(`${person.prenom} ${person.nom}`);
+      }
+    }
+
+    for (const manual of context.toFollowManual) {
+      if (!(session.user?.checkFollowedName(manual.nomPrenom) ?? false)) {
+        await session.user?.addFollowedName(manual.nomPrenom);
+        manualAdded.push(manual.display);
+      }
+    }
+
+    const sections: string[] = [];
+    const formatSection = (title: string, items: string[]): string => {
+      if (items.length === 0) return `${title}\n- Aucun`;
+      return `${title}\n${items.map((item) => `- ${item}`).join("\n")}`;
+    };
+
+    sections.push(formatSection("Suivis ajoutés", added));
+    sections.push(formatSection("Suivis manuels ajoutés", manualAdded));
+
+    await session.sendMessage(sections.join("\n\n"), {
+      keyboard: SEARCH_PROMPT_KEYBOARD
+    });
+    return true;
+  }
+
+  if (normalizedAnswer.includes("annuler") || normalizedAnswer.includes("non")) {
+    await session.sendMessage("Ajout groupé annulé.", {
+      keyboard: SEARCH_PROMPT_KEYBOARD
+    });
+    return true;
+  }
+
+  await session.sendMessage(
+    "Réponse non reconnue. Merci de confirmer ou annuler.",
+    { keyboard: MULTI_SEARCH_CONFIRM_KEYBOARD }
+  );
 
   return true;
 }
