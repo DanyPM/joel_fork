@@ -13,7 +13,7 @@ import { JORFSearchPublication } from "../entities/JORFSearchResponseMeta.ts";
 import { logError } from "../utils/debugLogger.ts";
 
 const TEXT_ALERT_PROMPT =
-  "Quel texte souhaitez-vous rechercher ? Renseignez un mot ou une expression.";
+  "Quel texte souhaitez-vous rechercher ? Renseignez un mot ou une expression. Vous pouvez ajouter plusieurs suivis à la fois en saisissant une expression par ligne.";
 
 const TEXT_RESULT_MAX = 5;
 
@@ -60,6 +60,21 @@ async function askTextAlertQuestion(session: ISession): Promise<void> {
 const TEXT_ALERT_CONFIRMATION_PROMPT = (alertString: string) =>
   `Confirmez-vous vouloir ajouter une alerte pour « ${alertString} » ? (Oui/Non)`;
 
+type TextAlertContext =
+  | { alertString: string; alertStrings?: undefined }
+  | { alertStrings: string[]; alertString?: undefined };
+
+const buildConfirmationPrompt = (context: TextAlertContext): string => {
+  if (context.alertStrings != null) {
+    return (
+      "Confirmez-vous vouloir ajouter une alerte pour chaque expression ci-dessous ? (Oui/Non)\n" +
+      context.alertStrings.map((follow) => `- ${follow}`).join("\n")
+    );
+  }
+
+  return TEXT_ALERT_CONFIRMATION_PROMPT(context.alertString);
+};
+
 async function handleTextAlertAnswer(
   session: ISession,
   answer: string
@@ -77,6 +92,79 @@ async function handleTextAlertAnswer(
 
   if (trimmedAnswer.startsWith("/")) {
     return false;
+  }
+
+  const alertLines = trimmedAnswer
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  if (alertLines.length >= 2) {
+    session.user ??= await User.findOrCreate(session);
+
+    const alreadyFollowed: string[] = [];
+    const toFollow: string[] = [];
+
+    for (const alertLine of alertLines) {
+      const { existingFollow } = findFollowedAlertString(
+        session.user,
+        alertLine
+      );
+
+      if (existingFollow != null) {
+        alreadyFollowed.push(existingFollow);
+      } else {
+        toFollow.push(alertLine);
+      }
+    }
+
+    let message =
+      "Vous avez saisi plusieurs expressions, une par ligne, pour un suivi multiple.\n\n";
+
+    if (alreadyFollowed.length > 0) {
+      message +=
+        "Vous suivez déjà les expressions suivantes :\n" +
+        alreadyFollowed.map((follow) => `- ${follow} ✅`).join("\n") +
+        "\n\n";
+    }
+
+    if (toFollow.length === 0) {
+      await session.sendMessage(message, {
+        keyboard: [[KEYBOARD_KEYS.TEXT_SEARCH.key], [KEYBOARD_KEYS.MAIN_MENU.key]]
+      });
+      return true;
+    }
+
+    const context = { alertStrings: toFollow } as const;
+
+    message += buildConfirmationPrompt(context);
+
+    const res = await askFollowUpQuestion(
+      session,
+      message,
+      handleTextAlertConfirmation,
+      {
+        context,
+        messageOptions: {
+          keyboard: [
+            [{ text: "✅ Oui" }, { text: "❌ Non" }],
+            [KEYBOARD_KEYS.MAIN_MENU.key]
+          ]
+        }
+      }
+    );
+
+    if (!res) {
+      await session.sendMessage(
+        "Une erreur est survenue. Veuillez réessayer ultérieurement."
+      );
+      await logError(
+        session.messageApp,
+        `Erreur dans textAlert en cherchant l'expression "${trimmedAnswer}"`
+      );
+    }
+
+    return true;
   }
 
   await session.sendMessage("Recherche en cours ...", {
@@ -199,7 +287,7 @@ async function handleTextAlertAnswer(
 async function handleTextAlertConfirmation(
   session: ISession,
   answer: string,
-  context: { alertString: string }
+  context: TextAlertContext
 ): Promise<boolean> {
   const trimmedAnswer = answer.trim();
 
@@ -210,7 +298,7 @@ async function handleTextAlertConfirmation(
     );
     await askFollowUpQuestion(
       session,
-      TEXT_ALERT_CONFIRMATION_PROMPT(context.alertString),
+      buildConfirmationPrompt(context),
       handleTextAlertConfirmation,
       {
         context,
@@ -232,19 +320,38 @@ async function handleTextAlertConfirmation(
   if (/oui/i.test(trimmedAnswer)) {
     session.user ??= await User.findOrCreate(session);
 
-    const wasAdded = await session.user.addFollowedAlertString(
-      context.alertString
-    );
-    let responseText = `Vous suivez déjà une alerte pour « ${context.alertString} ». ✅`;
-    if (wasAdded) {
-      responseText = `Alerte enregistrée pour « ${context.alertString} » ✅`;
-      session.log({ event: "/follow-meta" });
-    }
+    if (context.alertStrings != null) {
+      const responses: string[] = [];
 
-    await session.sendMessage(responseText, {
-      keyboard: [[KEYBOARD_KEYS.TEXT_SEARCH.key], [KEYBOARD_KEYS.MAIN_MENU.key]]
-    });
-    return true;
+      for (const alertString of context.alertStrings) {
+        const wasAdded = await session.user.addFollowedAlertString(alertString);
+        if (wasAdded) {
+          responses.push(`Alerte enregistrée pour « ${alertString} » ✅`);
+          session.log({ event: "/follow-meta" });
+        } else {
+          responses.push(`Vous suivez déjà une alerte pour « ${alertString} ». ✅`);
+        }
+      }
+
+      await session.sendMessage(responses.join("\n"), {
+        keyboard: [[KEYBOARD_KEYS.TEXT_SEARCH.key], [KEYBOARD_KEYS.MAIN_MENU.key]]
+      });
+      return true;
+    } else if (context.alertString != null) {
+      const wasAdded = await session.user.addFollowedAlertString(
+        context.alertString
+      );
+      let responseText = `Vous suivez déjà une alerte pour « ${context.alertString} ». ✅`;
+      if (wasAdded) {
+        responseText = `Alerte enregistrée pour « ${context.alertString} » ✅`;
+        session.log({ event: "/follow-meta" });
+      }
+
+      await session.sendMessage(responseText, {
+        keyboard: [[KEYBOARD_KEYS.TEXT_SEARCH.key], [KEYBOARD_KEYS.MAIN_MENU.key]]
+      });
+      return true;
+    }
   }
 
   if (/non/i.test(trimmedAnswer)) {
@@ -260,7 +367,7 @@ async function handleTextAlertConfirmation(
   );
   await askFollowUpQuestion(
     session,
-    TEXT_ALERT_CONFIRMATION_PROMPT(context.alertString),
+    buildConfirmationPrompt(context),
     handleTextAlertConfirmation,
     {
       context,
