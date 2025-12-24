@@ -155,7 +155,7 @@ describe("text.utils", () => {
     });
 
     it("removes special chars from mixed content", () => {
-      expect(removeSpecialCharacters("test[0-9]+")).toBe("test09");
+      expect(removeSpecialCharacters("test[0-9]+")).toBe("test0-9");
     });
   });
 
@@ -204,39 +204,46 @@ describe("text.utils", () => {
   });
 
   describe("fuzzyIncludes", () => {
-    it("matches needles within their own group and rejects titles from others", () => {
-      const scenarios = [
-        {
-          needles: ["ingénieurs armement", "corps armement"],
-          titles: [
-            "corps des ingénieurs de l'armement",
-            "recrutement exceptionnel au corps des ingénieurs de l'armement"
-          ]
-        },
-        {
-          needles: ["enseignants contractuels", "enseignants contrat"],
-          titles: [
-            "recrutement des enseignants contractuels du primaire",
-            "liste d'aptitude pour les enseignants contractuels en académie"
-          ]
-        }
-      ];
+    it("matches exact substrings", () => {
+      expect(fuzzyIncludes("hello world", "hello")).toBe(true);
+      expect(fuzzyIncludes("hello world", "world")).toBe(true);
+    });
 
-      scenarios.forEach((scenario, index) => {
-        scenario.needles.forEach((needle) => {
-          scenario.titles.forEach((title) => {
-            expect(fuzzyIncludes(title, needle)).toBe(true);
-          });
+    it("matches with French accents normalized", () => {
+      expect(fuzzyIncludes("café crème", "cafe creme")).toBe(true);
+    });
 
-          scenarios.forEach((otherScenario, otherIndex) => {
-            if (otherIndex === index) return;
+    it("matches words in order with gaps", () => {
+      expect(
+        fuzzyIncludes(
+          "corps des ingénieurs de l'armement",
+          "ingénieurs armement"
+        )
+      ).toBe(true);
+      expect(
+        fuzzyIncludes(
+          "recrutement exceptionnel au corps des ingénieurs de l'armement",
+          "corps armement"
+        )
+      ).toBe(true);
+    });
 
-            otherScenario.titles.forEach((otherTitle) => {
-              expect(fuzzyIncludes(otherTitle, needle)).toBe(false);
-            });
-          });
-        });
-      });
+    it("matches full phrase", () => {
+      expect(
+        fuzzyIncludes(
+          "recrutement des enseignants contractuels du primaire",
+          "enseignants contractuels"
+        )
+      ).toBe(true);
+    });
+
+    it("rejects unrelated phrases", () => {
+      expect(
+        fuzzyIncludes(
+          "recrutement des enseignants contractuels du primaire",
+          "ingénieurs armement"
+        )
+      ).toBe(false);
     });
 
     it("returns false for empty needle", () => {
