@@ -8,6 +8,9 @@ import eslintPluginPrettierRecommended from "eslint-plugin-prettier/recommended"
 import prettierConfig from "eslint-config-prettier";
 
 export default defineConfig(
+  {
+    ignores: ["coverage/**", "node_modules/**"]
+  },
   eslint.configs.recommended,
   tseslint.configs.strictTypeChecked,
   tseslint.configs.stylisticTypeChecked,
