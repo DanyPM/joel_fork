@@ -8,6 +8,8 @@ This directory contains the comprehensive test suite for the JOEL project.
 - `text.utils.test.ts` - Tests for text utility functions (69 tests)
 - `date.utils.test.ts` - Tests for date utility functions (17 tests)
 - `formatting.utils.test.ts` - Tests for formatting utility functions (35 tests)
+- `grouping.test.ts` - Tests for notification grouping logic (23 tests)
+- `Commands.test.ts` - Tests for command regex patterns and structure (17 tests)
 
 ### Integration Tests (Require MongoDB)
 - `People.test.ts` - Tests for People model
@@ -40,6 +42,8 @@ The test suite achieves high coverage for utility functions:
 - `date.utils.ts`: 100% coverage
 - `text.utils.ts`: 94.59% coverage
 - `formatting.utils.ts`: 86.66% coverage
+- `grouping.ts`: 34.05% coverage for pure functions
+- Command patterns: Comprehensive regex validation
 
 ## Test Setup Files
 
@@ -53,8 +57,10 @@ When adding new tests:
 
 1. **For utility functions**: Add tests to appropriate `*.test.ts` file in this directory
 2. **For model tests**: Use the existing model test structure with MongoDB setup
-3. **Naming convention**: Use `<module>.test.ts` format
-4. **Follow existing patterns**: Check existing tests for examples of good test structure
+3. **For command patterns**: Add tests to `Commands.test.ts` to validate regex patterns
+4. **For notification logic**: Add tests to `grouping.test.ts` for grouping logic
+5. **Naming convention**: Use `<module>.test.ts` format
+6. **Follow existing patterns**: Check existing tests for examples of good test structure
 
 ## Test Best Practices
 
@@ -63,3 +69,4 @@ When adding new tests:
 - Test both success and failure cases
 - Mock external dependencies when possible
 - Keep tests fast and independent
+- For command regex tests, verify both positive and negative cases
