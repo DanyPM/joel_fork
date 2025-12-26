@@ -21,9 +21,10 @@ import { logError } from "./debugLogger.ts";
 
 // Per Wikimedia policy, provide a descriptive agent with contact info.
 const USER_AGENT = "JOEL/1.0 (contact@joel-officiel.fr)";
-const RETRY_MAX = process.env.RETRY_ATTEMPTS
-  ? parseInt(process.env.RETRY_ATTEMPTS, 10)
-  : 3;
+const RETRY_MAX = (() => {
+  const val = parseInt(process.env.RETRY_ATTEMPTS ?? "", 10);
+  return !isNaN(val) && val > 0 ? val : 3;
+})();
 const BASE_RETRY_DELAY_MS = 1000;
 
 // Extend the InternalAxiosRequestConfig with the res field
