@@ -21,7 +21,9 @@ import { logError } from "./debugLogger.ts";
 
 // Per Wikimedia policy, provide a descriptive agent with contact info.
 const USER_AGENT = "JOEL/1.0 (contact@joel-officiel.fr)";
-const RETRY_MAX = 3;
+const RETRY_MAX = process.env.RETRY_ATTEMPS
+  ? parseInt(process.env.RETRY_ATTEMPS, 10)
+  : 3;
 const BASE_RETRY_DELAY_MS = 1000;
 
 // Extend the InternalAxiosRequestConfig with the res field
@@ -354,7 +356,8 @@ interface WikiDataAPIResponse {
 
 export async function searchOrganisationWikidataId(
   org_name: string,
-  messageApp: MessageApp
+  messageApp: MessageApp,
+  retryNumber = 0
 ): Promise<{ nom: string; wikidataId: WikidataId }[] | null> {
   if (org_name.length == 0) throw new Error("Empty org_name");
 
@@ -412,23 +415,43 @@ export async function searchOrganisationWikidataId(
         }));
       });
   } catch (error) {
-    umami.log({
-      event: "/jorfsearch-error",
-      messageApp,
-      payload: { wikidata_name: true }
-    });
-    await logError(
-      messageApp,
-      "Error in /searchOrganisationWikidataId command",
-      error
-    );
+    if (shouldRetry(error)) {
+      if (retryNumber < RETRY_MAX) {
+        await new Promise((resolve) =>
+          setTimeout(resolve, BASE_RETRY_DELAY_MS * (retryNumber + 1))
+        );
+        return await searchOrganisationWikidataId(
+          org_name,
+          messageApp,
+          retryNumber + 1
+        );
+      } else {
+        await logJORFSearchError("wikidata", messageApp);
+        console.log(
+          `JORFSearch request for wikidata aborted after ${String(RETRY_MAX)} tries`,
+          error
+        );
+      }
+    } else {
+      umami.log({
+        event: "/jorfsearch-error",
+        messageApp,
+        payload: { wikidata_name: true }
+      });
+      await logError(
+        messageApp,
+        "Error in /searchOrganisationWikidataId command",
+        error
+      );
+    }
   }
   return null;
 }
 
 export async function callJORFSearchReference(
   reference: string,
-  messageApp: MessageApp
+  messageApp: MessageApp,
+  retryNumber = 0
 ): Promise<JORFSearchItem[] | null> {
   try {
     umami.log({ event: "/jorfsearch-request-reference", messageApp });
@@ -452,12 +475,31 @@ export async function callJORFSearchReference(
         return cleanJORFItems(res.data);
       });
   } catch (error) {
-    umami.log({
-      event: "/jorfsearch-error",
-      messageApp,
-      payload: { reference: true }
-    });
-    await logError(messageApp, "Error in callJORFSearchReference", error);
+    if (shouldRetry(error)) {
+      if (retryNumber < RETRY_MAX) {
+        await new Promise((resolve) =>
+          setTimeout(resolve, BASE_RETRY_DELAY_MS * (retryNumber + 1))
+        );
+        return await callJORFSearchReference(
+          reference,
+          messageApp,
+          retryNumber + 1
+        );
+      } else {
+        await logJORFSearchError("reference", messageApp);
+        console.log(
+          `JORFSearch request for reference aborted after ${String(RETRY_MAX)} tries`,
+          error
+        );
+      }
+    } else {
+      umami.log({
+        event: "/jorfsearch-error",
+        messageApp,
+        payload: { reference: true }
+      });
+      await logError(messageApp, "Error in callJORFSearchReference", error);
+    }
   }
   return null;
 }
