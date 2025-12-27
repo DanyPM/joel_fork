@@ -182,7 +182,7 @@ function handleCommand(roomId: string, event: MatrixRoomEvent) {
             // If a user has left the room, mark him as blocked
             await User.updateOne(
               { _id: user._id },
-              { $set: { status: "active" }, $unset: { roomId: 1 } },
+              { $set: { status: "blocked" }, $unset: { roomId: 1 } },
               { runValidators: true }
             );
             await umami.logAsync({
@@ -213,7 +213,7 @@ function handleCommand(roomId: string, event: MatrixRoomEvent) {
                 chatId: event.sender
               });
               if (previousUser != null) {
-                // If a user has left the room, mark him as blocked
+                // If a user rejoins the room, mark him as active
                 await User.updateOne(
                   { _id: previousUser._id },
                   { $set: { status: "active", roomId: roomId } }
