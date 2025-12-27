@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach } from "@jest/globals";
 
-// We'll test the computeNextOccurrence function logic
-// Since it's not exported, we'll recreate the logic here for testing
+// NOTE: The computeNextOccurrence function is not exported from notificationScheduler.ts
+// To keep changes minimal, we recreate the logic here for testing rather than modifying
+// the module exports. In a future refactor, consider exporting the function for direct testing.
 
 interface DailyTime {
   hour: number;
