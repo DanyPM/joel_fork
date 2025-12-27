@@ -181,16 +181,18 @@ function handleCommand(roomId: string, event: MatrixRoomEvent) {
           if (user != null) {
             // If a user has left the room, mark him as blocked
             if (user.status === "active") {
-              await User.updateOne(
+              const res = await User.updateOne(
                 { _id: user._id },
                 { $set: { status: "blocked" }, $unset: { roomId: 1 } },
                 { runValidators: true }
               );
-              await umami.logAsync({
-                event: "/user-blocked-joel",
-                messageApp: matrixApp,
-                hasAccount: true
-              });
+              if (res.modifiedCount > 0) {
+                await umami.logAsync({
+                  event: "/user-blocked-joel",
+                  messageApp: matrixApp,
+                  hasAccount: true
+                });
+              }
             }
           }
           return;
@@ -217,15 +219,17 @@ function handleCommand(roomId: string, event: MatrixRoomEvent) {
               if (previousUser != null) {
                 // If a user has joined the room, mark him as active
                 if (previousUser.status === "blocked") {
-                  await User.updateOne(
+                  const res = await User.updateOne(
                     { _id: previousUser._id },
                     { $set: { status: "active", roomId: roomId } }
                   );
-                  umami.log({
-                    event: "/user-unblocked-joel",
-                    messageApp: matrixApp,
-                    hasAccount: true
-                  });
+                  if (res.modifiedCount > 0) {
+                    umami.log({
+                      event: "/user-unblocked-joel",
+                      messageApp: matrixApp,
+                      hasAccount: true
+                    });
+                  }
                 }
                 if (!previousUser.followsNothing())
                   msgText = KEYBOARD_KEYS.FOLLOWS_LIST.key.text;

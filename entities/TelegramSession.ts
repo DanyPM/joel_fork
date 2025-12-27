@@ -251,14 +251,16 @@ async function sendTelegramTypingAction(
     });
     // don't rely on recordSuccessfulDelivery which has higher footprint and is not necessary here
     if (expectedStatus === "blocked") {
-      await User.updateOne(
+      const res = await User.updateOne(
         { messageApp: "Telegram", chatId: chatIdTg.toString() },
         { $set: { status: "active" } }
       );
-      await umami.logAsync({
-        event: "/user-unblocked-joel",
-        messageApp: "Telegram"
-      });
+      if (res.modifiedCount > 0) {
+        await umami.logAsync({
+          event: "/user-unblocked-joel",
+          messageApp: "Telegram"
+        });
+      }
     }
   } catch (err) {
     const retryFunction = async (nextRetryNumber: number): Promise<boolean> => {
@@ -334,14 +336,16 @@ async function handleTelegramAPIErrors(
     switch (tgError.response?.data.description) {
       case "Forbidden: bot was blocked by the user": {
         if (user?.status === "active") {
-          await User.updateOne(
+          const res = await User.updateOne(
             { messageApp: "Telegram", chatId: chatIdTg.toString() },
             { $set: { status: "blocked" } }
           );
-          await umami.logAsync({
-            event: "/user-blocked-joel",
-            messageApp: "Telegram"
-          });
+          if (res.modifiedCount > 0) {
+            await umami.logAsync({
+              event: "/user-blocked-joel",
+              messageApp: "Telegram"
+            });
+          }
         }
         return false;
       }

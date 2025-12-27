@@ -37,8 +37,10 @@ export async function deleteEntitiesWithNoFollowers(
       "followedPeople.peopleId": peopleId
     });
     if (isStillFollowed === null) {
-      await People.deleteOne({ _id: peopleId });
-      umami.log({ event: "/person-deletion-no-follow" });
+      const res = await People.deleteOne({ _id: peopleId });
+      if (res.deletedCount > 0) {
+        umami.log({ event: "/person-deletion-no-follow" });
+      }
     }
   }
 
@@ -47,8 +49,10 @@ export async function deleteEntitiesWithNoFollowers(
       "followedOrganisations.wikidataId": wikidataId
     });
     if (isStillFollowed === null) {
-      await Organisation.deleteOne({ wikidataId });
-      umami.log({ event: "/organisation-deletion-no-follow" });
+      const res = await Organisation.deleteOne({ wikidataId });
+      if (res.deletedCount > 0) {
+        umami.log({ event: "/organisation-deletion-no-follow" });
+      }
     }
   }
 }

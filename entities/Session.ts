@@ -53,8 +53,10 @@ export async function loadUser(session: ISession): Promise<IUser | null> {
 
     if (user != null) {
       if (user.followsNothing()) {
-        await User.deleteOne({ _id: user._id });
-        umami.log({ event: "/user-deletion-no-follow" });
+        const res = await User.deleteOne({ _id: user._id });
+        if (res.deletedCount > 0) {
+          umami.log({ event: "/user-deletion-no-follow" });
+        }
         return null;
       }
       if (

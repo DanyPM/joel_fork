@@ -224,12 +224,9 @@ UserSchema.method(
       waitingReengagement: false
     };
 
+    let shouldLogUnblock = false;
     if (this.status === "blocked") {
-      umami.log({
-        event: "/user-unblocked-joel",
-        messageApp: this.messageApp,
-        hasAccount: true
-      });
+      shouldLogUnblock = true;
       this.status = "active";
       $set.status = "active";
     }
@@ -278,7 +275,15 @@ UserSchema.method(
       });
     }
 
-    await User.updateOne({ _id: this._id }, { $set });
+    const res = await User.updateOne({ _id: this._id }, { $set });
+    
+    if (shouldLogUnblock && res.modifiedCount > 0) {
+      umami.log({
+        event: "/user-unblocked-joel",
+        messageApp: this.messageApp,
+        hasAccount: true
+      });
+    }
   }
 );
 

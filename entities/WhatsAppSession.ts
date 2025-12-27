@@ -541,14 +541,16 @@ export async function handleWhatsAppAPIErrors(
     case 131008: {
       // user blocked the bot
       if (user?.status === "active") {
-        await User.updateOne(
+        const res = await User.updateOne(
           { messageApp: "WhatsApp", chatId: chatId },
           { $set: { status: "blocked" } }
         );
-        await umami.logAsync({
-          event: "/user-blocked-joel",
-          messageApp: "WhatsApp"
-        });
+        if (res.modifiedCount > 0) {
+          await umami.logAsync({
+            event: "/user-blocked-joel",
+            messageApp: "WhatsApp"
+          });
+        }
       }
       return false;
     }
