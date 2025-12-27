@@ -281,7 +281,8 @@ async function sendTelegramTypingAction(
       {
         retryFunction,
         retryNumber
-      }
+      },
+      status
     );
   }
   return true;
@@ -325,21 +326,25 @@ async function handleTelegramAPIErrors(
   retryParameters?: {
     retryFunction: (retryNumber: number) => Promise<boolean>;
     retryNumber: number;
-  }
+  },
+  expectedStatus?: "active" | "blocked"
 ): Promise<boolean> {
   if (isAxiosError(error)) {
     const tgError = error as AxiosError<TelegramAPIError>;
 
     switch (tgError.response?.data.description) {
       case "Forbidden: bot was blocked by the user":
-        await umami.logAsync({
-          event: "/user-blocked-joel",
-          messageApp: "Telegram"
-        });
-        await User.updateOne(
-          { messageApp: "Telegram", chatId: chatIdTg.toString() },
-          { $set: { status: "blocked" } }
-        );
+        // Only log and update if we expected the user to be active
+        if (expectedStatus !== "blocked") {
+          await umami.logAsync({
+            event: "/user-blocked-joel",
+            messageApp: "Telegram"
+          });
+          await User.updateOne(
+            { messageApp: "Telegram", chatId: chatIdTg.toString() },
+            { $set: { status: "blocked" } }
+          );
+        }
         return false;
       case "Forbidden: user is deactivated":
         await umami.logAsync({
