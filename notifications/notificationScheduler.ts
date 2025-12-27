@@ -44,16 +44,17 @@ function computeNextOccurrence(
   let timeShiftMs = 0;
   if (messageApps.some((m) => m === "WhatsApp")) {
     // advance next trigger time to make sure the notification from the day before was sent during the window with margin
-    const timeShiftIndex = (next.getDay() - 2) % 6;
+    // Fix: Add 6 before modulo to handle negative results from JavaScript's modulo operator
+    const timeShiftIndex = ((next.getDay() - 2) + 6) % 6;
     timeShiftMs =
       timeShiftIndex * WHATSAPP_REENGAGEMENT_MARGIN_MINS * 60 * 1000;
-    // Tuesday : expected time
-    // Wednesday: expected time - 1*MARGIN
-    // Thursday: expected time - 2*MARGIN
-    // Friday: expected time - 3*MARGIN
-    // Saturday: expected time - 4*MARGIN
-    // Sunday: expected time - 5*MARGIN
-    // Monday: expected time - 6*MARGIN (despite no notification being expected)
+    // Tuesday : expected time (shift 0)
+    // Wednesday: expected time - 1*MARGIN (shift 1)
+    // Thursday: expected time - 2*MARGIN (shift 2)
+    // Friday: expected time - 3*MARGIN (shift 3)
+    // Saturday: expected time - 4*MARGIN (shift 4)
+    // Sunday: expected time - 4*MARGIN (shift 4, same as Saturday)
+    // Monday: expected time - 5*MARGIN (shift 5)
 
     console.log(
       `WhatsApp is part of targetApps. Advancing target time by ${String(timeShiftIndex)}*WH_REENGAGEMENT_WINDOWS_MARGIN`
