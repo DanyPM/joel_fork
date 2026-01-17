@@ -100,6 +100,9 @@ client.on(
 
 // Handle bot being invited to a new room
 client.on("room.join", (roomId: string) => {
+  // Mark this room as recently joined to avoid duplicate welcome messages
+  // from processing stale m.room.member events
+  recentlyJoinedRooms.add(roomId);
   void (async () => {
     try {
       // Wait a moment for room state to stabilize
@@ -144,10 +147,6 @@ client.on("room.join", (roomId: string) => {
         messageApp: matrixApp,
         chatId: otherUserId
       });
-
-      // Mark this room as recently joined to avoid duplicate welcome messages
-      // from processing stale m.room.member events
-      recentlyJoinedRooms.add(roomId);
       setTimeout(() => {
         recentlyJoinedRooms.delete(roomId);
       }, ROOM_STATE_STABILIZATION_DELAY * 3); // Keep for 3x stabilization delay
@@ -401,6 +400,11 @@ function handleCommand(roomId: string, event: MatrixRoomEvent) {
             return;
           }
 
+          // Wait a moment for room state to stabilize
+          await new Promise((resolve) =>
+            setTimeout(resolve, ROOM_STATE_STABILIZATION_DELAY)
+          );
+
           // Skip if this room was recently joined by the bot to avoid processing
           // stale member events that would trigger duplicate welcome messages
           if (recentlyJoinedRooms.has(roomId)) {
@@ -409,11 +413,6 @@ function handleCommand(roomId: string, event: MatrixRoomEvent) {
             );
             return;
           }
-
-          // Wait a moment for room state to stabilize
-          await new Promise((resolve) =>
-            setTimeout(resolve, ROOM_STATE_STABILIZATION_DELAY)
-          );
 
           // leave non-direct rooms when a new member joins
           try {
