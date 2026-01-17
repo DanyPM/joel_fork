@@ -109,12 +109,12 @@ client.on("room.join", (roomId: string) => {
 
       // Check if this is a direct message (1-on-1) room
       const otherMemberCount = await getOtherMemberCount(roomId);
-      
+
       // Leave if room is empty
       if (await leaveIfEmptyRoom(roomId)) {
         return;
       }
-      
+
       if (otherMemberCount !== 1) {
         // Not a 1-on-1 room, leave it
         console.log(
@@ -330,7 +330,7 @@ function handleCommand(roomId: string, event: MatrixRoomEvent) {
   void (async () => {
     // Ensure serverUserId is initialized
     const botUserId = await ensureServerUserId();
-    
+
     // ignore message from itself
     if (event.sender === botUserId) return;
 
@@ -379,10 +379,10 @@ function handleCommand(roomId: string, event: MatrixRoomEvent) {
               });
             }
           }
-          
+
           // Leave if room is now empty
           await leaveIfEmptyRoom(roomId);
-          
+
           return;
         } else if (event.content.membership === "join") {
           // Skip if the bot itself is joining - this prevents duplicate welcome messages
@@ -390,6 +390,11 @@ function handleCommand(roomId: string, event: MatrixRoomEvent) {
           if (event.sender === botUserId) {
             return;
           }
+
+          // Wait a moment for room state to stabilize
+          await new Promise((resolve) =>
+            setTimeout(resolve, ROOM_STATE_STABILIZATION_DELAY)
+          );
 
           // leave non-direct rooms when a new member joins
           try {
@@ -436,7 +441,9 @@ function handleCommand(roomId: string, event: MatrixRoomEvent) {
               break;
             }
           } catch {
-            // unable to inspect room membership
+            console.log(
+              `Error checking member count on member join room ${roomId}`
+            );
             return;
           }
         } else return;
